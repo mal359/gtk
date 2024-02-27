@@ -408,6 +408,8 @@ gdk_init_check (int	 *argc,
     }
   
   GDK_NOTE (MISC, g_message ("progname: \"%s\"", g_get_prgname ()));
+
+  putenv("XLIB_SKIP_ARGB_VISUALS=1");
   
   gdk_display = XOpenDisplay (gdk_display_name);
   if (!gdk_display)
