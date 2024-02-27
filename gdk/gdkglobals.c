@@ -31,7 +31,11 @@
 #include "config.h"
 
 guint             gdk_debug_flags = 0;
+#ifdef __linux__
 gint              gdk_use_xshm = TRUE;
+#else
+gint              gdk_use_xshm = FALSE; 
+#endif
 gchar            *gdk_display_name = NULL;
 Display          *gdk_display = NULL;
 gint              gdk_screen;
