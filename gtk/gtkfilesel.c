@@ -2183,16 +2183,6 @@ gtk_file_selection_init (GtkFileSelection *filesel)
   gtk_container_add (GTK_CONTAINER (filesel), filesel->main_vbox);
   gtk_widget_show (filesel->main_vbox);
 
-  /* The horizontal box containing create, rename etc. buttons */
-  filesel->button_area = gtk_hbutton_box_new ();
-  gtk_button_box_set_layout(GTK_BUTTON_BOX(filesel->button_area), GTK_BUTTONBOX_START);
-  gtk_button_box_set_spacing(GTK_BUTTON_BOX(filesel->button_area), 0);
-  gtk_box_pack_start (GTK_BOX (filesel->main_vbox), filesel->button_area, 
-		      FALSE, FALSE, 0);
-  gtk_widget_show (filesel->button_area);
-  
-  gtk_file_selection_show_fileop_buttons(filesel);
-
   /* hbox for pulldown menu */
   pulldown_hbox = gtk_hbox_new (TRUE, 5);
   gtk_box_pack_start (GTK_BOX (filesel->main_vbox), pulldown_hbox, FALSE, FALSE, 0);
@@ -2202,7 +2192,7 @@ gtk_file_selection_init (GtkFileSelection *filesel)
   filesel->history_pulldown = gtk_option_menu_new ();
   gtk_widget_show (filesel->history_pulldown);
   gtk_box_pack_start (GTK_BOX (pulldown_hbox), filesel->history_pulldown, 
-		      FALSE, FALSE, 0);
+		      TRUE, FALSE, 0);
     
   /*  The horizontal box containing the directory and file listboxes  */
   list_hbox = gtk_hbox_new (FALSE, 5);
@@ -2289,6 +2279,16 @@ gtk_file_selection_init (GtkFileSelection *filesel)
   gtk_box_pack_start (GTK_BOX (list_hbox), scrolled_win, TRUE, TRUE, 0);
   gtk_widget_show (filesel->file_list);
   gtk_widget_show (scrolled_win);
+
+  /* The horizontal box containing create, rename etc. buttons */
+  filesel->button_area = gtk_hbutton_box_new ();
+  gtk_button_box_set_layout(GTK_BUTTON_BOX(filesel->button_area), GTK_BUTTONBOX_END);
+  gtk_button_box_set_spacing(GTK_BUTTON_BOX(filesel->button_area), 0);
+  gtk_box_pack_start (GTK_BOX (filesel->main_vbox), filesel->button_area, 
+		      FALSE, FALSE, 0);
+  gtk_widget_show (filesel->button_area);
+  
+  gtk_file_selection_show_fileop_buttons(filesel);
 
   /* action area for packing buttons into. */
   filesel->action_area = gtk_hbox_new (TRUE, 0);
