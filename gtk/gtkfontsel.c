@@ -3025,6 +3025,8 @@ gtk_font_selection_insert_font (GSList		      *fontnames[],
   /* Add another entry to the table for this new font family */
   temp_info.family = family_exists ? family : g_strdup(family);
   temp_info.foundry = foundry;
+  temp_info.nstyles = 0;
+  temp_info.style_index = 0;
   temp_fontname = g_slist_prepend (NULL, fontname);
   
   (*ntable)++;

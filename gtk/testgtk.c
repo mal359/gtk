@@ -3808,9 +3808,11 @@ insert_row_clist (GtkWidget *widget, gpointer data)
       col1.red   = 0;
       col1.green = 56000;
       col1.blue  = 0;
+      col1.pixel = 0;
       col2.red   = 32000;
       col2.green = 0;
       col2.blue  = 56000;
+      col2.pixel = 0;
 
       style1 = gtk_style_copy (GTK_WIDGET (data)->style);
       style1->base[GTK_STATE_NORMAL] = col1;
@@ -4067,9 +4069,11 @@ create_clist (void)
       col1.red   = 56000;
       col1.green = 0;
       col1.blue  = 0;
+      col1.pixel = 0;
       col2.red   = 0;
       col2.green = 56000;
       col2.blue  = 32000;
+      col2.pixel = 0;
 
       style = gtk_style_new ();
       style->fg[GTK_STATE_NORMAL] = col1;
@@ -4234,9 +4238,11 @@ void change_style (GtkWidget *widget, GtkCTree *ctree)
       col1.red   = 0;
       col1.green = 56000;
       col1.blue  = 0;
+      col1.pixel = 0;
       col2.red   = 32000;
       col2.green = 0;
       col2.blue  = 56000;
+      col2.pixel = 0;
 
       style1 = gtk_style_new ();
       style1->base[GTK_STATE_NORMAL] = col1;
