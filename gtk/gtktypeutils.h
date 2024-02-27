@@ -86,7 +86,7 @@ typedef enum
 #ifdef offsetof
 #define GTK_STRUCT_OFFSET(struct, field)        ((gint) offsetof (struct, field))
 #else /* !offsetof */
-#define GTK_STRUCT_OFFSET(struct, field)        ((gint) ((gchar*) &((struct*) 0)->field))
+#define GTK_STRUCT_OFFSET(struct, field)        ((gint) (size_t) ((gchar*) &((struct*) 0)->field))
 #endif /* !offsetof */
 
 
