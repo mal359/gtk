@@ -1,0 +1,13 @@
+# Fri Mar 26 16:52:34 CET 2004 Stanislav Brabec <sbrabec@suse.cz>
+# based on Mon Jan 27 18:21:42 2003 Mike Fabian <mfabian@suse.de>
+style "gtk-default-unifont" {
+       fontset = "-efont-biwidth-medium-r-normal-*-12-*-*-*-*-*-iso10646-1,\
+                    -gnu-unifont-medium-r-normal-*-16-*-*-*-p-*-iso10646-1,\
+                    -*-helvetica-medium-r-normal-*-12-*-*-*-p-*-iso10646-1,\
+                            -*-*-medium-r-normal-*-12-*-*-*-p-*-*-*,\
+                            -*-*-medium-r-normal-*-12-*-*-*-*-*-*-*,\
+                                      -*-*-*-r-*-*-12-*-*-*-*-*-*-*,\
+                                      -*-*-*-*-*-*-12-*-*-*-*-*-*-*"
+}
+class "GtkWidget" style "gtk-default-unifont"
+

@@ -1,0 +1,90 @@
+GTK+ FAQ for Debian
+---------------------
+
+Q. the following message is output. gtk+ doesn't provide it.
+
+The font "XLFD" does not support all the required character sets for the
+current locale "LOCALE"
+  (Missing character set "CHARSET")
+
+A1. Check if you have installed the *-transcoded packages
+    (xfonts-base-transcoded, xfonts-75dpi-transcoded and
+    xfonts-100dpi-transcoded). If not, try installing them.  If your problem
+    persists, read on.
+
+A2. This means an application specified XLFD, but that font has no CHARSET
+    LOCALE needs.
+    If it's GTK+ application, you may specify invalid font on gtkrc.
+    GTK+ will find gtkrc with the rules as the following:
+
+    1. gtkrc.ll_cc.lowercasecodeset
+    2. gtkrc.ll_cc.normalizedcodeset
+    3. gtkrc.ll.lowercasecodeset
+    4. gtkrc.ll.normalizedcodeset
+    5. gtkrc.lowercasecodeset
+    6. gtkrc.normalizedcodeset
+    7. gtkrc.ll_cc
+    8. gtkrc.ll
+
+    normalize the charset into a standard form, which has all '-' and '_'
+    characters removed.
+
+    Also GTK+ affect your locale. you can check that by the following code:
+
+    #include <stdio.h>
+    #include <locale.h>
+    #include <langinfo.h>
+
+    int main (void)
+    {
+    	setlocale (LC_CTYPE, "");
+	printf ("%s\n", nl_langinfo (CODESET));
+	return 0;
+    }
+
+    for example, your /etc/locale.gen has:
+    es_ES ISO-8859-1
+    es_ES@euro ISO-8859-15
+
+    and if you set es_ES@euro to LC_CTYPE, result of that program should be:
+    $ LC_CTYPE=es_ES@euro ./test
+    ISO-8859-15
+
+    GTK+ use this value for lowercasecodeset and normalizedcodeset.
+
+    And GTK+ will find gtkrc in order of path as the following:
+
+    1. /etc/gtk
+    2. ~/
+
+    Thus, you need to find invalid font according to the above rules.
+
+
+    If you can't find invalid font or that isn't GTK+ app, but that is GNOME
+    app, try to find gtkrc:
+
+    1. If you don't have strace, runs apt-get install strace.
+    2. strace <your app> |& grep gtkrc | grep open
+    3. If you get something, check the files found. invalid font should be
+       specified in the files.
+
+    If you are still unable to find invalid font, try to check app's
+    preferences and runs xlsfonts with XLFD.
+
+
+Q.  the following warning is output.
+
+Gdk-WARNING **: locale not supported by C library.
+
+A.  You has no your locale data. check your locale and /etc/locale.gen and
+    /usr/lib/locale/.
+
+
+Q.  the following warning is output.
+
+Gdk-WARNING **: locale not supported by Xlib, locale set to C.
+
+A.  This means your locale supports by libc, but not Xlib. In most cases,
+    you may specify invalid locale or Xlib has no aliases for the locale
+    you specified.
+

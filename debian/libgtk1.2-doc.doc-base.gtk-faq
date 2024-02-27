@@ -1,0 +1,17 @@
+Document: gtk-faq
+Title: GTK+ Frequently Asked Questions
+Author: Nathan Froyd, Tony Gale, Shawn T. Amundson.
+Abstract: This document is intended to answer questions that are
+ likely to be frequently asked by programmers using GTK+ or people who
+ are just looking at using GTK+.
+Section: Apps/Programming
+
+Format: linuxdoc-sgml
+Files: /usr/share/doc/libgtk1.2-doc/sgml/gtkfaq.sgml.gz
+
+Format: text
+Files: /usr/share/doc/libgtk1.2-doc/gtkfaq.txt.gz
+
+Format: HTML
+Index: /usr/share/doc/libgtk1.2-doc/faq-html/gtkfaq.html
+Files: /usr/share/doc/libgtk1.2-doc/faq-html/*.html

@@ -1,0 +1,16 @@
+Document: gtk-tutorial-fr
+Title: GTK+ Tutorial in French
+Author: Tony Gale and Ian Main
+Abstract: This is a tutorial, in French, on how to use GTK (the GIMP Toolkit)
+ through its C interface.
+Section: Apps/Programming
+
+Format: linuxdoc-sgml
+Files: /usr/share/doc/libgtk1.2-doc/sgml/gtk_tut_fr.sgml.gz
+
+Format: text
+Files: /usr/share/doc/libgtk1.2-doc/gtk_tut_fr.txt.gz
+
+Format: HTML
+Index: /usr/share/doc/libgtk1.2-doc/gtk-tutorial-fr-html/gtk_tut_fr.html
+Files: /usr/share/doc/libgtk1.2-doc/gtk-tutorial-fr-html/*.html

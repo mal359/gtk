@@ -1,0 +1,745 @@
+gtk+1.2 (1.2.10-18) unstable; urgency=low
+
+  * GNOME team upload.
+  * Add a static list of Uploaders for the GNOME team.
+  * Update Catalan translation.
+  * Cloak k*bsd-gnu systems as gnu to enable building on GNU/k*BSD. Normal
+    updating of libtool appears to be troublesome (thanks Robert Millan;
+    closes: #195921).
+  * Patch gtk.m4 and acgtk.m4 to silence newer aclocal versions
+    (closes: #267815).
+  * Patch the file selector to do file autocompletion like every other
+    application (thanks, Matt Zimmerman, even if you don't care at all
+    only because the patch is 3 years old and everyone is using GTK2
+    anyway :) closes: #148565).
+
+ -- Jordi Mallach <jordi@debian.org>  Thu,  6 Oct 2005 11:42:08 +0200
+
+gtk+1.2 (1.2.10-17) unstable; urgency=low
+
+  * debian/control:
+    - updated the build-depends for the separated xlibs-dev.
+      (closes: Bug#241781)
+    - updated the Depends of libgtk1.2-dev for the separated xlibs-dev.
+      (closes: Bug#254694, 241507)
+
+ -- Akira TAGOH <tagoh@debian.org>  Wed, 23 Jun 2004 22:18:58 +0900
+
+gtk+1.2 (1.2.10-16) unstable; urgency=low
+
+  * updated libtool stuff. (closes: Bug#195827)
+    - acgtk.m4: moved some m4 macros from acinclude.m4.
+    - acinclude.m4: removed.
+    - configure.in: add AC_PREREQ(2.13)
+    - ltconfig: removed.
+
+ -- Akira TAGOH <tagoh@debian.org>  Thu,  5 Jun 2003 12:54:52 +0900
+
+gtk+1.2 (1.2.10-15) unstable; urgency=low
+
+  * debian/control:
+    - bumped Standards-Version to 3.5.10.0.
+    - depends on versioned libgtk1.2-common.
+    - changed the sections for libgtk1.2-dev and libgtk1.2-dbg to libdevel.
+  * debian/compat:
+    - use it instead of DH_COMPAT.
+  * debian/rules:
+    - support noopt for DEB_BUILD_OPTIONS.
+  * debian/FAQ.Debian:
+    - add xfonts-*-transcoded stuff. Thanks to Kovacs Baldvin
+      <baldvin@angel.elte.hu>
+  * debian/libgtk1.2-common.postinst:
+    - do remove the unnecessary gtkrc files. (closes: Bug#159817)
+  * gtk/Makefile.in:
+    - fix the undefined non-weak symbols. (closes: Bug#187351)
+  * gdk/gdkfont.c:
+    - fix possibly unnecessary missing fontset warning on UTF-8 locale.
+      (closes: Bug#186025)
+
+ -- Akira TAGOH <tagoh@debian.org>  Sun,  1 Jun 2003 10:59:28 +0900
+
+gtk+1.2 (1.2.10-14) unstable; urgency=low
+
+  * debian/control: s/Recommends/Suggests/ for devhelp-book-gtk.
+
+ -- Akira TAGOH <tagoh@debian.org>  Thu, 22 Aug 2002 19:33:00 +0900
+
+gtk+1.2 (1.2.10-13) unstable; urgency=low
+
+  * debian/control: add devhelp-book-gtk to Recommends. (closes: Bug#148354)
+  * gtk/gtkentry.c: applied a patch to fix a segfault bug in
+    gtk_entry_set_selection(). Thanks Jan Gregor.
+  * gtk/gtkrc.zh_{CN,TW}: changed a font size for iso8859-1 to 12 Geoffrey Lee
+    suggested. (closes: Bug#157739)
+
+ -- Akira TAGOH <tagoh@debian.org>  Thu, 22 Aug 2002 02:50:14 +0900
+
+gtk+1.2 (1.2.10-12) unstable; urgency=low
+
+  * Applied some patches from RH.
+    - gdk/gdkselection.c: don't screw up CTEXT for UTF-8 locales.
+    - gtk/gtkfilesel.c: fix delete-filename-on-dir-change problem. (closes:
+      Bug#106897)
+    - gdk/gdkevents.c: improve expose compression.
+    - gdk/gdkfont.c: fix problem with width computation for missing
+      characters.
+    - gdk/gdkfont.c: improve warning for missing fontset elements.
+    - gtk/gtkstyle.c: fix refcounting problem in gtk_style_copy() that might
+      affect theme switching.
+    - gtk/gtkwindow.c: fix for theme switching.
+  * debian/FAQ.Debian: update.
+
+ -- Akira TAGOH <tagoh@debian.org>  Mon, 13 May 2002 03:47:10 +0900
+
+gtk+1.2 (1.2.10-11) unstable; urgency=low
+
+  * Add gtkfaq-[89].html (closes: Bug#142682)
+
+ -- Akira TAGOH <tagoh@debian.org>  Mon, 15 Apr 2002 02:19:49 +0900
+
+gtk+1.2 (1.2.10-10) unstable; urgency=low
+
+  * Fixed typo in FAQ (closes: Bug#30034)
+  * Fixed typo in tutorial (closes: Bug#113079)
+  * debian/FAQ.Debian: Added.
+  * debian/libgtk1.2-doc.info: added. fix running install-info on postinst
+    (closes: Bug#135981)
+  * debian/rules: changed as the following:
+    - support DEB_HOST_GNU_TYPE and DEB_BUILD_GNU_TYPE.
+    - support debug and nostrip for DEB_BUILD_OPTIONS.
+    - copying the latest config.sub and config.guess.
+  * gtkrc.utf-8: add arial font. (closes: Bug#135354)
+
+ -- Akira TAGOH <tagoh@debian.org>  Fri, 22 Mar 2002 08:32:55 +0900
+
+gtk+1.2 (1.2.10-9) unstable; urgency=medium
+
+  * Fixed the duplicate conffiles.
+  * Fixed symlink transition for -dbg. (closes: Bug#125596)
+  * Fixed Gtk?Paned widget misdisplayed on Alpha again...
+    (closes: Bug#123579)
+  * Fixed a correct entry for gtkrc.utf-8. (closes: Bug#114934)
+
+ -- Akira TAGOH <tagoh@debian.org>  Thu, 20 Dec 2001 01:48:29 +0900
+
+gtk+1.2 (1.2.10-8) unstable; urgency=low
+
+  * Fixed fails to purge cleanly (closes: Bug#122745)
+  * Note: Don't use --enable-debug=yes.
+    it give us any strange problem.
+
+ -- Akira TAGOH <tagoh@debian.org>  Fri,  7 Dec 2001 16:41:39 +0900
+
+gtk+1.2 (1.2.10-7) unstable; urgency=low
+
+  * Fixed remove obsolates conffiles by purge.
+  * Fixed incorrect handling pointer in back-ported patch of gtkrc.
+    (closes: Bug#122603)
+  * Fixed search order for gtkrc again... (closes: Bug#121467)
+  * Hmm I'm not sure, but pull down --enable-debug=minimum because
+    make sure the cause of strange problem. so it's a default value.
+
+ -- Akira TAGOH <tagoh@debian.org>  Thu,  6 Dec 2001 23:52:12 +0900
+
+gtk+1.2 (1.2.10-6) unstable; urgency=low
+
+  * Fixed uninstallable problem (closes: Bug#122208)
+
+ -- Akira TAGOH <tagoh@debian.org>  Tue,  4 Dec 2001 00:48:16 +0900
+
+gtk+1.2 (1.2.10-5) unstable; urgency=low
+
+  * Applied back-ported patch from CVS.
+    fix search order for gtkrc. (closes: Bug#121467)
+  * Applied back-ported patch from CVS.
+    fix focus problem (closes: Bug#108099)
+  * Removed duplicate info files. (closes: Bug#121734)
+  * Closed these bugs because it already fixed in the latest version.
+    (closes: Bug#94698, Bug#29661, Bug#35039, Bug#46541, Bug#64728)
+  * Added Depends: pkg-config for -dev.
+
+ -- Akira TAGOH <tagoh@debian.org>  Sun,  2 Dec 2001 19:54:49 +0900
+
+gtk+1.2 (1.2.10-4) unstable; urgency=low
+
+  * Fixed missing files (closes: Bug#56912)
+  * Closed this bug because it already fixed in the latest version.
+    (closes: Bug#72585, Bug#28148, Bug#69409, Bug#117990)
+  * re-created debian/ (closes: Bug#44913)
+  * -dbg package contains shared libraries for debugging. so if you
+    need static link, add -static to compiler option and use
+    static libraries which is included in libgtk1.2-dev.
+    (closes: Bug#98349)
+  * Moved pkg-config files to -dev (closes: Bug#103199)
+  * Fixed GtkHPaned widget are misdisplayed on Alpha.
+    (closes: Bug#115315)
+  * Includes example codes on -dev. (closes: Bug#112347)
+
+ -- Akira TAGOH <tagoh@debian.org>  Sat, 24 Nov 2001 21:40:38 +0900
+
+gtk+1.2 (1.2.10-3) unstable; urgency=low
+
+  * Fixed a problem where fractional sizes caused infinite loop.
+    (closes: Bug#100678)
+  * Closed NMU fix (closes: Bug#114923, Bug#109808, Bug#48129, Bug#53524,
+    Bug#67903)
+  * Fixed some lintian error.
+  * I took over this package from Ben.
+
+ -- Akira TAGOH <tagoh@debian.org>  Sat, 17 Nov 2001 10:55:55 +0900
+
+gtk+1.2 (1.2.10-2.1) unstable; urgency=low
+
+  * NMU
+  * Re-run libtoolize & aclocal for new arch support.  Closes: #114923.
+
+ -- LaMont Jones <lamont@debian.org>  Sun, 21 Oct 2001 11:20:07 -0600
+
+gtk+1.2 (1.2.10-2) unstable; urgency=low
+
+  * It looks like --with-native-locale=yes (change made in 1.2.10-1)
+    broke Swedish support.  I guess it doesn't work.  Removed.
+    (Closes: #108441)
+  * Patch to not override X's beep level. (Closes: #94081, #110961)
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  8 Oct 2001 09:56:37 +0900
+
+gtk+1.2 (1.2.10-1) unstable; urgency=low
+
+  * New upstream version.  
+  * This new version fixes all locale-related bugs recently
+    reported.  Note that if you don't want high ASCII characters to 
+    be silently munched with glibc 2.2, at least set LANG=en_US to
+    get it away from the default to C, which no longer allows high
+    ASCII characters.  (Closes: #74796, #77263, #89379, #90776, #89125,
+    #89129, #89806)
+  * Build with --with-native-locale=yes.  Should fix all locales-related
+    segfaults recently reported. (But if you want high ASCII chars
+    to appear when using libc 2.2, you should set LANG=en_US at least,
+    or it'll default to LANG=C and filter all high ASCII characters!)
+    (Closes: #89125, #89129)
+  * Add support in debian/rules for adding -g and not stripping if
+    DEB_BUILD_OPTIONS contains "debug" or "nostrip", respectively.
+    (Closes: #33952, #34007)
+  * Remove dependancy on gconv-modules. (Closes: #89082)
+  
+ -- Ben Gertzfield <che@debian.org>  Sun,  1 Apr 2001 21:58:04 -0700
+
+gtk+1.2 (1.2.9-2) unstable; urgency=medium
+
+  * Bump Build-Depends to require libglib1.2 (>= 1.2.9-1).
+
+ -- Ben Gertzfield <che@debian.org>  Tue,  6 Mar 2001 08:54:13 -0800
+
+gtk+1.2 (1.2.9-1) unstable; urgency=low
+
+  * New upstream version.
+  * Include Changes-1.2.txt in libgtk1.2-doc. (Closes: #48129)
+  * Fixed bashisms in debian/rules long ago. (Closes: #69409)
+  * Note: include files have been moved into /usr/include/gtk-1-2/
+    to allow parallel installation with gtk+ 2.0.  Remember to
+    use gtk-config to compile programs!
+  * A note from upstream says that there were a lot of locale fixes
+    in this release.  Let's hope so!
+  * Setuid/setgid GTK+ programs will now refuse to initialize.  Remember
+    to drop all setuid/setgid privileges before initializing GTK+!
+  * Several out-of-date documents were removed upstream: gdk-tutorial
+    and gtk-manual are available online now.
+  * About the FAQ missing page bugs: the pages just don't seem to
+    get generated from the SGML no matter what I do; I'm not
+    removing them by hand or anything.  I'll spend more time looking
+    into this later..
+
+ -- Ben Gertzfield <che@debian.org>  Fri,  2 Mar 2001 16:39:36 -0800
+
+gtk+1.2 (1.2.8-4) unstable; urgency=low
+
+  * Change dependancy for libgtk1.2-dev to xlibs-dev. Closes: #80744
+  * Fixed in 1.2.8-2 (dpkg 1.6.8 issue) Closes: #63081
+  * It's perfectly easy to make a binary-only upload of gtk+1.2.
+    There are no weird dependancies between the Arch: all package
+    (libgtk1.2-doc) and the others; libgtk1.2-dev and libgtk1.2-dbg
+    merely Suggest: libgtk1.2-doc.  Wichert, please supply more context
+    with your bug reports next time!  Closes: #77462
+  * I can set LANG=fr_FR no problem with gtk+ 1.2.8 if I've uncommented
+    the line in /etc/locale.gen and run locale-gen.  Not a bug.
+    Closes: #83636
+  * Not a bug. (the packages are not corrupt on any mirrors I've
+    seen.) Closes: #81406
+  * Previously fixed bugs: Closes: #67996, #66867, #81406
+  
+ -- Ben Gertzfield <che@debian.org>  Wed, 28 Feb 2001 10:37:42 -0800
+
+gtk+1.2 (1.2.8-3) unstable; urgency=low
+
+  * D'oh. Add Source-Depends on libglib1.2-dev (>= 1.2.8).
+    Closes: #81201
+
+ -- Ben Gertzfield <che@debian.org>  Thu,  4 Jan 2001 10:28:22 -0800
+
+gtk+1.2 (1.2.8-2) unstable; urgency=low
+
+  * Bump Standards-Version to 3.2.1.
+  * Fix bashism in debian/rules. Closes: #79384
+  * Workaround for lack of MAXPATHLEN on hurd. Closes: #72312
+  * Add Pre-Depends and preinst check for dpkg 1.6.8 for multiple
+    Conflicts/Replaces.
+
+ -- Ben Gertzfield <che@debian.org>  Sat, 23 Dec 2000 14:37:40 -0800
+
+gtk+1.2 (1.2.8-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Wed, 24 May 2000 19:55:03 -0700
+
+gtk+1.2 (1.2.7-1) frozen unstable; urgency=HIGH
+
+  * New upstream version *must* make it into frozen, as it fixes
+    RC i18n bugs.
+  * i18n bugs fixed: #56503, #57805, #57498, #57403
+
+ -- Ben Gertzfield <che@debian.org>  Thu, 17 Feb 2000 09:34:04 -0800
+
+gtk+1.2 (1.2.6-2) frozen unstable; urgency=HIGH
+
+  * Change dependancy from gconv-modules | libc6 (<< 2.1) to just
+    gconv-modules to fix upgrade path. (Otherwise apt gets very
+    very confused.) Closes: #56477, #56528, #56530, #56535, #56857
+
+ -- Ben Gertzfield <che@debian.org>  Wed,  2 Feb 2000 08:28:46 -0800
+
+gtk+1.2 (1.2.6-1) unstable; urgency=low
+
+  * New upstream version.
+  * Move docs and info to /usr/share/{doc,info}.
+
+ -- Ben Gertzfield <che@debian.org>  Fri, 15 Oct 1999 10:35:06 -0700
+
+gtk+1.2 (1.2.5-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Fri, 24 Sep 1999 09:36:27 -0700
+
+gtk+1.2 (1.2.4-3) unstable; urgency=low
+
+  * Change Depends: for libgtk1.2 to depend on gconv-modules | libc6 (<< 2.1)
+    (Closes: #44442)
+
+ -- Ben Gertzfield <che@debian.org>  Wed,  8 Sep 1999 07:05:25 -0700
+
+gtk+1.2 (1.2.4-2) unstable; urgency=low
+
+  * Add Depends: on gconv-modules to fix locales
+    problems. (Closes: #40704, #43800)
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 31 Aug 1999 09:31:55 -0700
+
+gtk+1.2 (1.2.4-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 24 Aug 1999 13:00:44 -0700
+
+gtk+1.2 (1.2.3-2) unstable; urgency=low
+
+  * Fix depends of -dev and -dbg to always depend on exact version of lib.
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 27 Jul 1999 15:30:25 -0700
+
+gtk+1.2 (1.2.3-1) unstable; urgency=low
+
+  * New upstream version.
+  * Make shlibs stricter, as binary interface has changed.
+  * Register docs with doc-base.
+  * Reorganize docs in libgtk1.2-doc, include texinfo and sgml formats.
+  * Wow. I never included the actual GTK+ manual in HTML or text forms
+    before..
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 11 May 1999 22:04:15 -0700
+
+gtk+1.2 (1.2.2-1) unstable; urgency=low
+
+  * New upstream version. (Note that the 1.2.2-2 uploaded originally
+    was a typo)
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 27 Apr 1999 11:32:07 -0700
+
+gtk+1.2 (1.2.1-1) unstable; urgency=low
+
+  * New upstream version.
+  * Loosen up shlibs; now programs compiled against GTK+ 1.2 depend on
+    libgtk1.2 (>= 1.2.0).
+
+ -- Ben Gertzfield <che@debian.org>  Thu, 25 Mar 1999 10:43:35 -0800
+
+gtk+1.2 (1.2.0-1) unstable; urgency=low
+
+  * New stable upstream version. Woo woo!
+
+ -- Ben Gertzfield <che@debian.org>  Thu, 25 Feb 1999 23:46:11 -0800
+
+gtk+1.1.16 (1.1.16-1) unstable; urgency=low
+
+  * New upstream version.
+  * Defaults to debug being on now. Normal libgtk1.1.16 packages will
+    be built with --enable-debug=minimum.
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 16 Feb 1999 17:11:00 -0800
+
+gtk+1.1.15 (1.1.15-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  8 Feb 1999 17:08:36 -0800
+
+gtk+1.1.14 (1.1.14-1) unstable; urgency=low
+
+  * Okay, *this* is GTK+ 1.1.14 upstream release. Sheesh.
+
+ -- Ben Gertzfield <che@debian.org>  Sat, 30 Jan 1999 18:16:19 -0800
+
+gtk+1.1.13 (1:1.1.13-1) unstable; urgency=low
+
+  * Crap, crap, crap. The GTK+ folks had told me that 1.1.14 was binary-
+    compatible with 1.1.13. It's not. It doesn't even have the same soname;
+    I shouldn't have trusted them. :) This is really version 1.1.13 again.
+
+ -- Ben Gertzfield <che@debian.org>  Sat, 30 Jan 1999 17:28:29 -0800
+
+gtk+1.1.13 (1.1.14-1) unstable; urgency=low
+
+  * New upstream version. Note source name did not change, as the
+    soname is still .13, because .14 and .13 are binary compatible.
+  * Make absolutely sure the postinst for libgtk1.1.13 only calls
+    ldconfig on 'configure' calls
+
+ -- Ben Gertzfield <che@debian.org>  Fri, 29 Jan 1999 21:11:44 -0800
+
+gtk+1.1.13 (1.1.13-1) unstable; urgency=low
+
+  * New upstream version.
+  * Now libgtk1.1.x-dev Depends: on xlib6g-dev
+
+ -- Ben Gertzfield <che@debian.org>  Wed, 20 Jan 1999 18:34:15 -0800
+
+gtk+1.1.12 (1.1.12-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  4 Jan 1999 14:27:45 -0800
+
+gtk+1.1.11 (1.1.11-1) unstable; urgency=low
+
+  * New upstream version. (They skipped 1.1.10.)
+
+ -- Ben Gertzfield <che@debian.org>  Wed, 30 Dec 1998 22:27:43 -0800
+
+gtk+1.1.9 (1.1.9-1) unstable; urgency=low
+
+  * New upstream version.
+  * Now debian/rules uses $(version) variable to make my life easier.
+  * debian/doc-postinst debian/doc-prerm: new files, which are copied
+    to the versioned names for debhelper goodness from debian/rules
+    and cleaned in debian/rules clean
+
+ -- Ben Gertzfield <che@debian.org>  Thu, 17 Dec 1998 11:24:44 -0800
+
+gtk+1.1.6 (1.1.6-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Wed,  9 Dec 1998 08:06:44 -0800
+
+gtk+1.1.5 (1.1.5-3) unstable; urgency=low
+
+  * Rebuild to fix bug #30459
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  7 Dec 1998 12:58:05 -0800
+
+gtk+1.1.5 (1.1.5-2) unstable; urgency=low
+
+  * Now libgtk1.1.5-dev Provides: libgtk-dev and libgtk1.1-dev.
+
+ -- Ben Gertzfield <che@debian.org>  Sun, 29 Nov 1998 18:51:05 -0800
+
+gtk+1.1.5 (1.1.5-1) unstable; urgency=low
+
+  * Now the source and binary packages *all* specifically have the version
+    number in them. This is so a new release of glib or gtk+ does not break
+    all apps dependant upon glib or gtk+'s unstable branch.
+  * Removed --enable-debug=no from libgtk1.1 build; it was causing problems
+  * Now includes themes support! Yay!
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 24 Nov 1998 14:28:06 -0800
+
+gtk+1.1 (1:1.1.3-1) unstable; urgency=low
+
+  * New upstream version.
+  * Now libgtk1.1-dev and libgtk1.1-dbg depend on ${Source-Version} of
+    libgtk1.1/libgtk1.1-dev as libglib1.1 does.
+
+ -- Ben Gertzfield <che@debian.org>  Thu,  5 Nov 1998 10:59:43 -0800
+
+gtk+1.1 (1:1.1.2-2) unstable; urgency=low
+
+  * Same change as to gtk+_1.0.6-2 -- new clean-dbg target to deal
+    with my brain-fart that was helped along by an old broken
+    debhelper.
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 29 Sep 1998 12:28:31 -0700
+
+gtk+1.1 (1:1.1.2-1) unstable; urgency=low
+
+  * New upstream version.
+  * Now depends upon instead of recommends glib1.1/glib-dev.
+  * New libgtk1.1-dbg package.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 21 Sep 1998 23:16:53 -0700
+
+gtk+1.1 (1:1.1.1-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Tue,  4 Aug 1998 22:45:02 -0700
+
+gtk+1.1 (1:1.1.0-1) unstable; urgency=low
+
+  * New packages for the unstable development branch of GTK+, 1.1.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 27 Jul 1998 14:04:40 -0700
+
+gtk+ (1:1.0.5-1) unstable; urgency=low
+
+  * New upstream version:
+  * - Minor documentation fixups
+  * - Fixes for clist (pixmap clipping), notebook, optionmenu, spinbutton
+      and text widgets.
+  * - Minor fixup about base class initializations in the type system.
+  * - Fix for a major bug in the signal code that would cause random crashes.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 27 Jul 1998 11:34:53 -0700
+
+gtk+ (1:1.0.4-1) frozen unstable; urgency=low
+
+  * This is the final release of gtk+ that, along with GIMP, will be
+    released into Debian 2.0.
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  1 Jun 1998 22:10:33 -0700
+
+gtk+ (1:1.0.3-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 26 May 1998 17:20:26 -0700
+
+gtk+ (1:1.0.2-2) frozen unstable; urgency=low
+
+  * Added 'Replaces: libgtk-dev (<< 1.0.2)' to control for libgtk1.
+    Fixes bug #22842.
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 26 May 1998 12:49:49 -0700
+
+gtk+ (1:1.0.2-1) frozen unstable; urgency=low
+
+  * New stable upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 18 May 1998 12:17:52 -0700
+
+gtk+ (1:1.0.1-1) frozen unstable; urgency=low
+
+  * This is a bug-fix-only upstream release.
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  4 May 1998 21:50:01 -0700
+
+gtk+ (1:1.0.0-1) frozen unstable; urgency=low
+
+  * Hooray! Version 1.0.0 has been released! This will hopefully
+    be the final Debian version of gtk+ for hamm.
+  * .gifs added to libgtk-doc, fixes bug #20720.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 13 Apr 1998 20:32:06 -0700
+
+gtk+ (1:0.99.10-1) frozen unstable; urgency=low
+
+  * New upstream version, lots more bugfixes.
+  * Built without .deps directories.
+  * Renamed ChangeLog.gz to changelog.gz in libgtk-doc, fixes lintian
+    error.
+
+ -- Ben Gertzfield <che@debian.org>  Tue,  7 Apr 1998 23:42:36 -0700
+
+gtk+ (1:0.99.9-1) frozen unstable; urgency=low
+
+  * New upstream version, fixes many bugs with color displays.
+  * Hopefully fixed all lintian warnings.
+
+ -- Ben Gertzfield <che@debian.org>  Sun, 29 Mar 1998 13:46:25 -0800
+
+gtk+ (1:0.99.8-1) unstable; urgency=low
+
+  * New upstream version.
+  * New file included in libgtk-dev: /usr/share/aclocal/gtk.m4,
+    to help autoconf/automake developers use gtk and gtk-config
+    more easily.
+  * New file included in libgtk-doc: /usr/doc/libgtk-doc/gtk-config.txt
+    Please refer to this doc when developing for gtk or compiling
+    and running into odd path-related errors.
+    
+ -- Ben Gertzfield <che@debian.org>  Thu, 19 Mar 1998 19:58:53 -0800
+
+gtk+ (1:0.99.7-4) frozen unstable; urgency=low
+
+  * Rebuild with native Debian libtool to have libraries properly
+    linked with libc and libX et al.
+
+ -- Ben Gertzfield <che@debian.org>  Tue, 17 Mar 1998 16:05:13 -0800
+
+gtk+ (1:0.99.7-3) frozen unstable; urgency=low
+
+  * Accidentally included all the html docs in /usr/doc/libgtk-doc/faq-html;
+    moved the tutorial into /usr/doc/libgtk-doc/tutorial-html.
+  * Included the Italian Gtk+ Tutorial in 
+    /usr/doc/libgtk-doc/italian-tutorial-html.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 16 Mar 1998 22:39:57 -0800
+
+gtk+ (1:0.99.7-2) unstable; urgency=low
+
+  * Upstream source added a /usr/lib/glib/ directory that I didn't
+    notice; included this directory in libgtk-dev.
+  * Realized that Xinput support was broken because I was doing
+    ./configure --enable-xinput=xfree instead of ./configure
+    --with-xinput=xfree. Fixed.
+
+ -- Ben Gertzfield <che@debian.org>  Sun, 15 Mar 1998 19:17:05 -0800
+
+gtk+ (1:0.99.7-1) unstable; urgency=low
+
+  * New upstream release -- THIS IS INCOMPATIBLE WITH OLDER RELEASES!
+    All Gtk-using packages *will* need patches to work with this Gtk!
+  * Upstream release includes 'gtk-config' script to check installed
+    version of Gtk; included said script in libgtk-dev in /usr/bin.
+
+ -- Ben Gertzfield <che@debian.org>  Sun, 15 Mar 1998 11:03:03 -0800
+
+gtk+ (1:0.99.5-2) unstable; urgency=low
+
+  * Modified libgtk-doc to Replace: libgtk-dev (<< 1:0.99.4) to
+    deal with both packages including the same .info files.
+    Fixes bug #19533.
+  * Also noticed that libgtk-dev depended on libgtk1 without
+    an epoch! Fixed.
+
+ -- Ben Gertzfield <che@debian.org>  Thu, 12 Mar 1998 13:37:11 -0800
+
+gtk+ (1:0.99.5-1) unstable; urgency=low
+
+  * Wow, that was quick, a new upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  9 Mar 1998 22:08:08 -0800
+
+gtk+ (1:0.99.4-3) unstable; urgency=low
+
+  * Recompiled with --enable-xinput=xfree to enable Wacom pads
+    and other physical input devices.
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  9 Mar 1998 21:26:07 -0800
+
+gtk+ (1:0.99.4-2) unstable; urgency=MEDIUM
+
+  * Ack! The shlibs file makes things depend on libgtk1 (>= 0.99.4)
+    rather than (>= 1:0.99.4)! Fixes bug #19134.
+
+ -- Ben Gertzfield <che@debian.org>  Sat,  7 Mar 1998 23:57:33 -0800
+
+gtk+ (1:0.99.4-1) unstable; urgency=low
+
+  * New upstream version.
+  * Recompiled with new debhelper to remove du warnings.
+  * Upstream source is named gtk+, not libgtk1. Changed source name.
+  * Removed --disable-xim in hopes that xim is no longer broken.
+  * Removed testgtk at the behest of the Gtk developers until I can
+    come up with a better solution, probably related to:
+  * the new libgtk-doc package! :) libgtk-doc contains the Gtk FAQ,
+    the Gtk Tutorial, and the Gtk info files.
+
+ -- Ben Gertzfield <che@debian.org>  Tue,  3 Mar 1998 22:23:47 -0800
+
+libgtk1 (1:0.99.3-2) unstable; urgency=low
+
+  * Created manpage for testgtk program.
+  * Fixed copyright mention to LGPL.gz to be just LGPL.
+  * This fixes all known lintian errors.
+
+ -- Ben Gertzfield <che@debian.org>  Wed, 11 Feb 1998 14:07:17 -0800
+
+libgtk1 (1:0.99.3-1) unstable; urgency=low
+
+  * New upstream version.
+  * Include the testgtk binary in libgtk-dev.
+
+ -- Ben Gertzfield <che@debian.org>  Sat, 24 Jan 1998 15:30:09 -0800
+
+libgtk1 (1:0.99.2-2) unstable; urgency=low
+
+  * Fixed shlibs file to specify version >=1:0.99.2.
+  * Renamed debian/postinst.libgtk1 to debian/postinst, so debhelper
+    would actually install it.
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  5 Jan 1998 12:22:46 -0800
+
+libgtk1 (1:0.99.2-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Ben Gertzfield <che@debian.org>  Sun,  4 Jan 1998 00:21:21 -0800
+
+libgtk1 (1:0.99.0-1) unstable; urgency=medium
+
+  * New upstream version with new numbering scheme, went to epoch :1
+    correspondingly.
+  * Hopefully fixed entry-field bug.
+  * Converted to use debhelper.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 15 Dec 1997 12:02:25 -0800
+
+libgtk1 (971201-1) unstable; urgency=low
+
+  * New upstream version.
+  * Fixed copyright to say LGPL, not GPL. (bug #14867)
+  * Re-added postinst ldconfig call. (bug #14213)
+  * Info files should be correct now. (bugs #14773, #15143)
+
+ -- Ben Gertzfield <che@debian.org>  Mon,  1 Dec 1997 16:41:50 -0800
+
+libgtk1 (971109-1) unstable; urgency=low
+
+  * New upstream version.
+  * Name is really 'GIMP Tool Kit', not 'General Tool Kit'.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 10 Nov 1997 16:15:27 -0800
+
+libgtk1 (970925-3) unstable; urgency=low
+
+  * Moved the include files to /usr/include/{gtk,gdk}.
+  * Removed postinst/postrm ldconfig calls, fixes old gimp bug #13773.
+
+ -- Ben Gertzfield <che@debian.org>  Fri, 17 Oct 1997 17:06:10 -0700
+
+libgtk1 (970925-2) unstable; urgency=low
+
+  * Added the shlibs file.
+  * Removed the postinst/postrm calls to ldconfig, fixes bug #13733.
+
+ -- Ben Gertzfield <che@debian.org>  Fri, 10 Oct 1997 17:55:39 -0700
+
+libgtk1 (970925-1) unstable; urgency=low
+
+  * New upstream version.
+  * Split off source tree from gimp's source tree.
+
+ -- Ben Gertzfield <che@debian.org>  Mon, 29 Sep 1997 13:14:45 -0700
+
+

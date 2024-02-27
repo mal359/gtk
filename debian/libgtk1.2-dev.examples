@@ -1,0 +1,5 @@
+examples/*
+gtk/test*.c
+gtk/testgtkrc*
+gtk/test.xpm
+

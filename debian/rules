@@ -1,0 +1,185 @@
+#!/usr/bin/make -f
+# Sample debian/rules that uses debhelper.
+# GNU copyright 1997 to 1999 by Joey Hess.
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+# These are used for cross-compiling and for saving the configure script
+# from having to guess our platform (since we know it already)
+DEB_HOST_GNU_TYPE	?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+DEB_BUILD_GNU_TYPE	?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+DEB_BUILD_GNU_CPU	?= $(shell dpkg-architecture -qDEB_BUILD_GNU_CPU)
+DEB_BUILD_GNU_SYSTEM	?= $(shell dpkg-architecture -qDEB_BUILD_GNU_SYSTEM)
+
+ifeq ($(DEB_BUILD_GNU_SYSTEM),kfreebsd-gnu)
+DEB_BUILD_GNU_TYPE	= $(DEB_BUILD_GNU_CPU)-gnu
+DEB_HOST_GNU_TYPE	= $(DEB_HOST_GNU_CPU)-gnu
+endif
+ifeq ($(DEB_BUILD_GNU_SYSTEM),knetbsd-gnu)
+DEB_BUILD_GNU_TYPE	= $(DEB_BUILD_GNU_CPU)-gnu
+DEB_HOST_GNU_TYPE	= $(DEB_HOST_GNU_CPU)-gnu
+endif
+
+ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+	CFLAGS += -O0
+else
+	CFLAGS += -O2
+endif
+ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
+	INSTALL_PROGRAM += -s
+endif
+
+##
+version=$(shell dpkg-parsechangelog | grep '^Version: ' | sed -e 's/^Version: //' | sed -e 's/-.*//')
+
+__configure_options :=	--host=$(DEB_HOST_GNU_TYPE) \
+			--build=$(DEB_BUILD_GNU_TYPE) \
+			--prefix=/usr \
+			--mandir=\$${prefix}/share/man \
+			--infodir=\$${prefix}/share/info \
+			--sysconfdir=/etc \
+			--localstatedir=/var \
+			--with-xinput=xfree
+libpath=$(CURDIR)/gdk/.libs:$(CURDIR)/gtk/.libs
+
+config.status: configure
+	dh_testdir
+
+	# When install the shared libraries, don't relink it
+	cp debian/fixed-ltmain.sh $(CURDIR)/ltmain.sh
+
+	# Add here commands to configure the package.
+	# so it avoid gcc bug for Alpha.
+ifeq ("x$(DEB_BUILD_ARCH)","xalpha")
+	CFLAGS="-g -O0 -Wall" ./configure $(__configure_options)
+else
+	./configure $(__configure_options)
+endif
+
+	sed < libtool > libtool-2 \
+	 -e 's/^hardcode_libdir_flag_spec.*$$/hardcode_libdir_flag_spec=" -D__LIBTOOL_IS_A_FOOL__ "/' \
+	 -e '/^archive_cmds="/s/"$$/ \\$$deplibs"/' && \
+	mv libtool-2 libtool
+
+	touch $@
+
+build: build-stamp
+build-stamp: config.status
+	dh_testdir
+
+	# Add here commands to compile the package.
+	$(MAKE) LD_LIBRARY_PATH=$(libpath):$(LD_LIBRARY_PATH)
+
+	touch $@
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp
+
+	# Add here commands to clean up after the build process.
+	-$(MAKE) distclean
+	-test -r /usr/share/misc/config.sub && \
+	   cp -f /usr/share/misc/config.sub config.sub
+	-test -r /usr/share/misc/config.guess && \
+	   cp -f /usr/share/misc/config.guess config.guess
+
+	rm -rf po/ca.gmo
+
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs
+
+	# Add here commands to install the package into debian/tmp
+	$(MAKE) install \
+		prefix=$(CURDIR)/debian/libgtk1.2/usr \
+		sysconfdir=$(CURDIR)/debian/libgtk1.2/etc \
+		localstatedir=$(CURDIR)/debian/libgtk1.2/var \
+		LD_LIBRARY_PATH=$(libpath):$(LD_LIBRARY_PATH)
+
+	# for -dbg
+	mkdir -p $(CURDIR)/debian/libgtk1.2/usr/lib/debug
+	for l in `find $(CURDIR)/debian/libgtk1.2/usr/lib -name '*.so*'`; do \
+		cp -vdf $$l \
+			$(CURDIR)/debian/libgtk1.2/usr/lib/debug/; \
+	done
+
+	# for -doc
+	cp docs/*.sgml $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/sgml/
+	cp docs/text/*.txt $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/
+	cp docs/*.texi $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/texinfo/
+	cp docs/html/gtkfaq*.html $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/faq-html
+	cp docs/html/gtk_tut-*.html $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/gtk-tutorial-html
+	cp docs/html/*.gif $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/gtk-tutorial-html
+	cp docs/html/gtk_tut.html $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/gtk-tutorial-html
+	cp docs/html/gtk_tut_it*.html $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/gtk-tutorial-it-html
+	cp docs/html/*.gif $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/gtk-tutorial-it-html
+	cp docs/html/gtk_tut_fr*.html $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/gtk-tutorial-fr-html
+	cp docs/html/*.gif $(CURDIR)/debian/libgtk1.2-doc/usr/share/doc/libgtk1.2-doc/gtk-tutorial-fr-html
+
+	dh_movefiles --sourcedir=debian/libgtk1.2
+	-find $(CURDIR)/debian/libgtk1.2 -type d -empty | xargs rmdir -p 2>&1 > /dev/null
+
+# Build architecture-independent files here.
+binary-indep: build install
+	dh_testdir -i
+	dh_testroot -i
+
+	dh_installdocs -i
+	dh_installdocs -plibgtk1.2-common -A debian/README.Debian
+	dh_installdocs -plibgtk1.2-doc docs/debugging.txt docs/developers.txt docs/styles.txt docs/text_widget.txt docs/widget_system.txt docs/gtk-config.txt docs/refcounting.txt docs/Changes-1.2.txt docs/generation.txt
+
+	dh_installexamples -i
+	dh_installmenu -i
+	dh_installinfo -i
+	dh_installchangelogs -i ChangeLog
+	dh_compress -i
+	dh_fixperms -i
+	dh_installdeb -i
+	dh_gencontrol -i
+	dh_md5sums -i
+	dh_builddeb -i
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir -a
+	dh_testroot -a
+
+#	dh_installdebconf -a
+	dh_installdocs -a
+
+	rm -rf $(CURDIR)/debian/libgtk1.2-dbg/usr/share/doc/libgtk1.2-dbg
+	dh_link -plibgtk1.2-dbg usr/share/doc/libgtk1.2 usr/share/doc/libgtk1.2-dbg
+
+	dh_installexamples -a
+
+	rm $(CURDIR)/debian/libgtk1.2-dev/usr/share/doc/libgtk1.2-dev/examples/find-examples.sh
+
+	dh_installmenu -a
+#	dh_installlogrotate -a
+#	dh_installemacsen -a
+#	dh_installpam -a
+#	dh_installmime -a
+#	dh_installinit -a
+#	dh_installcron -a
+	dh_installman -a
+	dh_installinfo -a
+	dh_installchangelogs -a ChangeLog
+	dh_strip -a -Nlibgtk1.2-dbg
+	dh_compress -a
+	dh_fixperms -a
+	dh_makeshlibs -plibgtk1.2 -V "libgtk1.2 (>= ${version}-4)" -l$(libpath)
+	dh_installdeb -a
+#	dh_perl -a
+	dh_shlibdeps -a
+	dh_gencontrol -a
+	dh_md5sums -a
+	dh_builddeb -a
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

@@ -1,0 +1,16 @@
+Document: gtk-tutorial-it
+Title: GTK+ Tutorial in Italian
+Author: Tony Gale and Ian Main
+Abstract: This is a tutorial, in Italian, on how to use GTK (the GIMP Toolkit)
+ through its C interface.
+Section: Apps/Programming
+
+Format: linuxdoc-sgml
+Files: /usr/share/doc/libgtk1.2-doc/sgml/gtk_tut_it.sgml.gz
+
+Format: text
+Files: /usr/share/doc/libgtk1.2-doc/gtk_tut_it.txt.gz
+
+Format: HTML
+Index: /usr/share/doc/libgtk1.2-doc/gtk-tutorial-it-html/gtk_tut_it.html
+Files: /usr/share/doc/libgtk1.2-doc/gtk-tutorial-it-html/*.html
