@@ -8,4 +8,4 @@ Description: GIMP Tool Kit
 Version: @VERSION@
 Requires: gdk
 Libs: -L${libdir} -lgtk
-Cflags: 
+Cflags: -I${includedir}/gtk+-1.2 @x_cflags@
