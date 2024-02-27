@@ -61,9 +61,9 @@ except that this permission notice may be stated in a translation
 approved by Peter Mattis.
 @end titlepage
 
-@dircategory User Interface Toolkit
+@dircategory Libraries:
 @direntry
-* GDK: (gdk).		The General Drawing Kit
+* GDK: (gdk).				The General Drawing Kit
 @end direntry
 
 @node Top, Copying, (dir), (dir)

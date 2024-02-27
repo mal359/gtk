@@ -68,9 +68,9 @@ except that this permission notice may be stated in a translation
 approved by Peter Mattis.
 @end titlepage
 
-@dircategory User Interface Toolkit
+@dircategory Libraries:
 @direntry
-* GTK: (gtk).		The GIMP Toolkit
+* GTK: (gtk).				The GIMP Toolkit
 @end direntry
 
 @node Top, Copying, (dir), (dir)
