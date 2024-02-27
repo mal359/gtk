@@ -344,11 +344,17 @@ gdk_window_new (GdkWindow     *parent,
       depth = visual->depth;
       
       if (attributes_mask & GDK_WA_COLORMAP)
-	private->colormap = attributes->colormap;
+      {
+        private->colormap = attributes->colormap;
+        gdk_colormap_ref(private->colormap);
+      }
       else
 	{
 	  if ((((GdkVisualPrivate*)gdk_visual_get_system ())->xvisual) == xvisual)
-	    private->colormap = gdk_colormap_get_system ();
+      {
+        private->colormap = gdk_colormap_get_system ();
+        gdk_colormap_ref(private->colormap);
+      }
 	  else
 	    private->colormap = gdk_colormap_new (visual, False);
 	}
@@ -402,6 +408,7 @@ gdk_window_new (GdkWindow     *parent,
       depth = 0;
       class = InputOnly;
       private->colormap = gdk_colormap_get_system ();
+      gdk_colormap_ref(private->colormap);
     }
   
   private->xwindow = XCreateWindow (private->xdisplay, xparent,
@@ -410,9 +417,6 @@ gdk_window_new (GdkWindow     *parent,
 				    xattributes_mask, &xattributes);
   gdk_window_ref (window);
   gdk_xid_table_insert (&private->xwindow, window);
-  
-  if (private->colormap)
-    gdk_colormap_ref (private->colormap);
   
   gdk_window_set_cursor (window, ((attributes_mask & GDK_WA_CURSOR) ?
 				  (attributes->cursor) :
