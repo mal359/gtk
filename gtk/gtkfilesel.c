@@ -3478,6 +3478,7 @@ cmpl_init_state (void)
 {
   gchar getcwd_buf[2*MAXPATHLEN];
   CompletionState *new_state;
+  gint fallback = 0;
 
   new_state = g_new (CompletionState, 1);
 
@@ -3494,6 +3495,7 @@ cmpl_init_state (void)
        * a root directory, right? Right? (Probably not portable to non-Unix)
        */
       strcpy (getcwd_buf, "/");
+      fallback = 1;
     }
 
 tryagain:
@@ -3516,7 +3518,26 @@ tryagain:
   if (!new_state->reference_dir)
     {
       /* Directories changing from underneath us, grumble */
-      strcpy (getcwd_buf, "/");
+      if (fallback == 0) {
+	strcpy (getcwd_buf, "/");
+	fallback = 1;
+      }
+      else {
+	if (fallback == 1) { /* last try with user home dir */
+	  if (g_get_home_dir ()) {
+	    strcpy (getcwd_buf, g_get_home_dir ());
+	  }
+	  fallback = 2;
+	}
+	else {
+	  g_error ("no readable fallback directory found for GtkFileSelector, exiting");
+	}
+      }
+      /* don't leak updated_text and the_completion.text */
+      if (new_state->the_completion.text)
+	g_free (new_state->the_completion.text);
+      if (new_state->updated_text)
+	g_free (new_state->updated_text);
       goto tryagain;
     }
 
