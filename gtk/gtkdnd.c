@@ -858,9 +858,7 @@ gtk_drag_dest_set   (GtkWidget            *widget,
   g_return_if_fail (widget != NULL);
 
   /* HACK, do this in the destroy */
-  site = gtk_object_get_data (GTK_OBJECT (widget), "gtk-drag-dest");
-  if (site)
-    gtk_signal_disconnect_by_data (GTK_OBJECT (widget), site);
+  gtk_drag_dest_unset (widget);
 
   if (GTK_WIDGET_REALIZED (widget))
     gtk_drag_dest_realized (widget);
@@ -908,9 +906,7 @@ gtk_drag_dest_set_proxy (GtkWidget      *widget,
   g_return_if_fail (widget != NULL);
 
   /* HACK, do this in the destroy */
-  site = gtk_object_get_data (GTK_OBJECT (widget), "gtk-drag-dest");
-  if (site)
-    gtk_signal_disconnect_by_data (GTK_OBJECT (widget), site);
+  gtk_drag_dest_unset (widget);
 
   if (GTK_WIDGET_REALIZED (widget))
     gtk_drag_dest_realized (widget);
@@ -2677,9 +2673,13 @@ gtk_drag_update (GtkDragSourceInfo *info,
       && info->last_event != event)
     {
       if (info->last_event)
-	gdk_event_free ((GdkEvent *)info->last_event);
-      
-      info->last_event = gdk_event_copy ((GdkEvent *)event);
+	{
+	  if (info->last_event != event)
+	    {
+	      gdk_event_free ((GdkEvent *)info->last_event);
+	      info->last_event = gdk_event_copy ((GdkEvent *)event);
+	    }
+	}
     }
 
   if (dest_window)
