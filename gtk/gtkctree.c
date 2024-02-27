@@ -630,8 +630,8 @@ gtk_ctree_init (GtkCTree *ctree)
   ctree->tree_indent    = 20;
   ctree->tree_spacing   = 5;
   ctree->tree_column    = 0;
-  ctree->line_style     = GTK_CTREE_LINES_SOLID;
-  ctree->expander_style = GTK_CTREE_EXPANDER_SQUARE;
+  ctree->line_style     = GTK_CTREE_LINES_NONE;
+  ctree->expander_style = GTK_CTREE_EXPANDER_TRIANGLE;
   ctree->drag_compare   = NULL;
   ctree->show_stub      = TRUE;
 
