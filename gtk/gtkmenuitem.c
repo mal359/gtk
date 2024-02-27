@@ -34,7 +34,7 @@
 
 
 #define BORDER_SPACING  3
-#define SELECT_TIMEOUT  75
+#define SELECT_TIMEOUT  150
 
 #define MENU_ITEM_CLASS(w)  GTK_MENU_ITEM_CLASS (GTK_OBJECT (w)->klass)
 
