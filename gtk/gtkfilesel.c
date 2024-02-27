@@ -2338,6 +2338,7 @@ gtk_file_selection_init (GtkFileSelection *filesel)
                              (GtkSignalFunc) gtk_button_clicked,
                              GTK_OBJECT (filesel->ok_button));
   gtk_box_pack_start (GTK_BOX (entry_vbox), filesel->selection_entry, TRUE, TRUE, 0);
+  gtk_object_set_data (GTK_OBJECT (filesel->selection_entry), "last_entry_was_dir_selection", (gpointer) FALSE);
   gtk_widget_show (filesel->selection_entry);
 
   if (!cmpl_state_okay (filesel->cmpl_state))
@@ -2969,9 +2970,11 @@ gtk_file_selection_key_press (GtkWidget   *widget,
   g_return_val_if_fail (widget != NULL, FALSE);
   g_return_val_if_fail (event != NULL, FALSE);
 
+  fs = GTK_FILE_SELECTION (user_data);
+  gtk_object_set_data (GTK_OBJECT (fs->selection_entry), "last_entry_was_dir_selection", (gpointer) FALSE);
+
   if (event->keyval == GDK_Tab)
     {
-      fs = GTK_FILE_SELECTION (user_data);
       text = gtk_entry_get_text (GTK_ENTRY (fs->selection_entry));
 
       text = g_strdup (text);
@@ -3097,6 +3100,8 @@ gtk_file_selection_file_button (GtkWidget *widget,
 {
   GtkFileSelection *fs = NULL;
   gchar *filename, *temp = NULL;
+  const gchar *entry_text;
+  gboolean last_entry_was_dir_selection;
   
   g_return_if_fail (GTK_IS_CLIST (widget));
 
@@ -3106,10 +3111,14 @@ gtk_file_selection_file_button (GtkWidget *widget,
   
   gtk_clist_get_text (GTK_CLIST (fs->file_list), row, 0, &temp);
   filename = g_strdup (temp);
+  
+  entry_text = gtk_entry_get_text (GTK_ENTRY (fs->selection_entry));
+   last_entry_was_dir_selection = (gboolean) gtk_object_get_data (GTK_OBJECT (fs->selection_entry), "last_entry_was_dir_selection");
 
   if (filename)
     {
-      if (bevent)
+      gtk_object_set_data (GTK_OBJECT (fs->selection_entry), "last_entry_was_dir_selection", (gpointer) FALSE);
+			if (bevent)
 	switch (bevent->type)
 	  {
 	  case GDK_2BUTTON_PRESS:
@@ -3117,14 +3126,24 @@ gtk_file_selection_file_button (GtkWidget *widget,
 	    break;
 	    
 	  default:
-	    gtk_entry_set_text (GTK_ENTRY (fs->selection_entry), filename);
+	    if (!entry_text || !strlen (entry_text) || last_entry_was_dir_selection)
+	      {
+		gtk_entry_set_text (GTK_ENTRY (fs->selection_entry), filename);
+		last_entry_was_dir_selection = TRUE;
+	      }
 	    break;
 	  }
-      else
-	gtk_entry_set_text (GTK_ENTRY (fs->selection_entry), filename);
+      else if (!entry_text || !strlen (entry_text) || last_entry_was_dir_selection)
+	  {
+	    gtk_entry_set_text (GTK_ENTRY (fs->selection_entry), filename);
+	    last_entry_was_dir_selection = TRUE;
+	  }
 
       g_free (filename);
     }
+
+  gtk_object_set_data (GTK_OBJECT (fs->selection_entry), "last_entry_was_dir_selection",
+		       (gpointer) last_entry_was_dir_selection);
 }
 
 static void
@@ -3292,7 +3311,12 @@ gtk_file_selection_populate (GtkFileSelection *fs,
     }
   else if (reset_entry)
     {
-      if (fs->selection_entry)
+      gboolean last_entry_was_dir_selection;
+
+      last_entry_was_dir_selection = (gboolean) gtk_object_get_data (GTK_OBJECT (fs->selection_entry),
+								     "last_entry_was_dir_selection");
+
+      if (fs->selection_entry && last_entry_was_dir_selection)
 	gtk_entry_set_text (GTK_ENTRY (fs->selection_entry), "");
     }
 
