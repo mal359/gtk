@@ -161,8 +161,8 @@ gtk_range_class_init (GtkRangeClass *class)
   widget_class->focus_out_event = gtk_range_focus_out;
   widget_class->style_set = gtk_range_style_set;
 
-  class->slider_width = 11;
-  class->stepper_size = 11;
+  class->slider_width = 13;
+  class->stepper_size = 13;
   class->stepper_slider_spacing = 1;
   class->min_slider_size = 7;
   class->trough = 1;
