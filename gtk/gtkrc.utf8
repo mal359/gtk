@@ -1,7 +1,18 @@
-style "default-text" {
-       fontset = "-*-helvetica-medium-r-normal--*-120-*-*-p-*-*-*"
+# This file defines the fontsets for UTF-8 encoding
+#
+# Mon Jan 27 18:21:42 2003 Mike Fabian  <mfabian@suse.de>
+ 
+style  "gtk-default-utf-8" {
+       fontset = "-*-helvetica-medium-r-normal--12-*-*-*-*-*-iso10646-1,\
+                  -*-arial-medium-r-normal--12-*-*-*-*-*-iso10646-1,\
+                  -*-*-medium-r-normal--12-*-*-*-*-*-iso10646-1,\
+                  -efont-biwidth-medium-r-normal-*-12-*-*-*-*-*-iso10646-1,\
+                  -gnu-unifont-medium-r-normal-*-16-*-*-*-*-*-iso10646-1,\
+                  -baekmuk-gulim-medium-r-normal-*-12-*-*-*-*-*-ksc5601.1987-*,\
+        	  -shinonome-gothic-medium-r-normal-*-12-*-*-*-*-*-jisx0208.*-0,\
+                  -*-*-*-r-*--12-*-*-*-*-*-iso10646-1,\
+                  -*-*-*-*-*--12-*-*-*-*-*-iso10646-1,\
+                  -*-*-*-*-*--12-*-*-*-*-*-*-*"
+ }
 
-}
-
-class "GtkWidget" style "default-text"
-
+class "GtkWidget" style "gtk-default-utf-8" 

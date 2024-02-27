@@ -1,8 +1,14 @@
+# Mon Jan 27 18:21:42 2003 Mike Fabian  <mfabian@suse.de>
 style "gtk-default-ja" {
-       fontset = "-adobe-helvetica-medium-r-normal--14-100-100-100-p-76-iso8859-1,\
-		  -ricoh-ms mincho-medium-r-normal--14-*-*-*-*-*-jisx0208.1983-0,\
-                  -misc-fixed-medium-r-normal--14-*-*-*-*-*-jisx0208.1983-0,\
-		  *-r-*"
+       fontset = "-efont-biwidth-medium-r-normal-*-12-*-*-*-*-*-iso10646-1,\
+                    -gnu-unifont-medium-r-normal-*-16-*-*-*-p-*-iso10646-1,\
+                    -*-helvetica-medium-r-normal-*-12-*-*-*-p-*-iso8859-*,\
+               -shinonome-gothic-medium-r-normal-*-12-*-*-*-*-*-jisx0208.*-0,\
+                    -alias-fixed-medium-r-normal-*-12-*-*-*-*-*-jisx0208.1983-0,\
+                            -*-*-medium-r-normal-*-12-*-*-*-p-*-*-*,\
+                            -*-*-medium-r-normal-*-12-*-*-*-*-*-*-*,\
+                                      -*-*-*-r-*-*-12-*-*-*-*-*-*-*,\
+                                      -*-*-*-*-*-*-12-*-*-*-*-*-*-*"
 }
 class "GtkWidget" style "gtk-default-ja"
 
