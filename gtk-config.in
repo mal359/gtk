@@ -95,7 +95,7 @@ if test "$lib_gthread" = "yes"; then
 fi
 
 if test "$echo_cflags" = "yes"; then
-      echo -I${includedir}/gtk-1.2 $glib_cflags @x_cflags@ 
+      echo -I@includedir@ -I@includedir@/gtk-1.2 $glib_cflags @x_cflags@
 fi
 
 if test "$echo_libs" = "yes"; then
