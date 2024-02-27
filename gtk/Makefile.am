@@ -37,7 +37,7 @@ libgtk_la_LDFLAGS = @STRIP_BEGIN@ \
 	$(filter-out -lXi -lXext, @x_libs@)			\
 	-lm							\
 @STRIP_END@
-#	$(top_builddir)/gdk/libgdk.la
+libgtk_la_LIBADD = $(top_builddir)/gdk/libgdk.la
 
 
 #
