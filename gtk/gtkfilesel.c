@@ -2082,6 +2082,8 @@ static void documents_clicked (GtkWidget *widget, gpointer data);
 
 static GtkWindowClass *parent_class = NULL;
 
+static char *last_dir = NULL;
+
 /* Saves errno when something cmpl does fails. */
 static gint cmpl_errno;
 
@@ -3296,6 +3298,8 @@ gtk_file_selection_populate (GtkFileSelection *fs,
 
   if (!did_recurse)
     {
+      char *dirname;
+      struct stat ent_sbuf;
       if (fs->selection_entry)
 	gtk_entry_set_position (GTK_ENTRY (fs->selection_entry), selection_index);
 
@@ -3313,6 +3317,18 @@ gtk_file_selection_populate (GtkFileSelection *fs,
 	{
 	  gtk_file_selection_update_history_menu (fs, cmpl_reference_position (cmpl_state));
 	}
+	
+	dirname = cmpl_reference_position (cmpl_state);
+        if(dirname && stat(dirname, &ent_sbuf) >= 0 && S_ISDIR(ent_sbuf.st_mode))
+          {
+            if (last_dir) 
+              {
+                g_free (last_dir);
+              }
+  
+  
+            
+            last_dir = g_strdup_printf ("%s%c", dirname, G_DIR_SEPARATOR);
     }
 
   g_free (rel_path);
