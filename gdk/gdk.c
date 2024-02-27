@@ -704,16 +704,18 @@ gdk_pointer_grab (GdkWindow *	  window,
   
   if (return_val == Success)
     {
-      if (!window_private->destroyed)
-	return_val = XGrabPointer (window_private->xdisplay,
-				   xwindow,
-				   owner_events,
-				   xevent_mask,
-				   GrabModeAsync, GrabModeAsync,
-				   xconfine_to,
-				   xcursor,
-				   time);
-      else
+      if (!window_private->destroyed) {
+	if (getenv ("GTK_NO_GRAB") == NULL) {
+	  return_val = XGrabPointer (window_private->xdisplay,
+				     xwindow,
+				     owner_events,
+				     xevent_mask,
+				     GrabModeAsync, GrabModeAsync,
+				     xconfine_to,
+				     xcursor,
+				     time);
+	}
+      } else
 	return_val = AlreadyGrabbed;
     }
   
@@ -802,13 +804,16 @@ gdk_keyboard_grab (GdkWindow *	   window,
   window_private = (GdkWindowPrivate*) window;
   xwindow = window_private->xwindow;
   
-  if (!window_private->destroyed)
-    return XGrabKeyboard (window_private->xdisplay,
-			  xwindow,
-			  owner_events,
-			  GrabModeAsync, GrabModeAsync,
-			  time);
-  else
+  if (!window_private->destroyed) {
+    if (getenv ("GTK_NO_GRAB") == NULL) {
+      return XGrabKeyboard (window_private->xdisplay,
+			    xwindow,
+			    owner_events,
+			    GrabModeAsync, GrabModeAsync,
+			    time);
+    } else
+      return Success;
+  } else
     return AlreadyGrabbed;
 }
 
