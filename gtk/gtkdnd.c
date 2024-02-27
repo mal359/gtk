@@ -2673,7 +2673,8 @@ gtk_drag_update (GtkDragSourceInfo *info,
   if (gdk_drag_motion (info->context, dest_window, protocol,
 		       x_root, y_root, action, 
 		       possible_actions,
-		       time))
+		       time)
+      && info->last_event != event)
     {
       if (info->last_event)
 	gdk_event_free ((GdkEvent *)info->last_event);
