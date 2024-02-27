@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#if defined (HAVE_IPC_H) && defined (HAVE_SHM_H) && defined (HAVE_XSHM_H)
+#if defined (HAVE_IPC_H) && defined (HAVE_SHM_H) && defined (HAVE_XSHM_H) && !defined (__APPLE__)
 #define USE_SHM
 #endif
 
