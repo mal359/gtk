@@ -275,7 +275,7 @@ strdup __argz_count __argz_stringify __argz_next])
      AC_DEFINE(HAVE_STPCPY)
    fi
 
-   AM_LC_MESSAGES
+   gt_LC_MESSAGES
    AM_GTK_WITH_NLS
 
    if test "x$CATOBJEXT" != "x"; then
