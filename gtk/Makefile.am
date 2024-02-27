@@ -1,6 +1,6 @@
 ## Makefile.am for gtk+/gtk
 
-INCLUDES = @STRIP_BEGIN@ \
+INCLUDES = \
 	-DG_LOG_DOMAIN=\"Gtk\"				\
 	-DGTK_DISABLE_COMPAT_H				\
 	-DGTK_LIBDIR=\"$(libdir)\"	     	        \
@@ -12,8 +12,7 @@ INCLUDES = @STRIP_BEGIN@ \
 	@GTK_XIM_FLAGS@					\
 	@GTK_LOCALE_FLAGS@				\
 	@GLIB_CFLAGS@					\
-	@x_cflags@					\
-@STRIP_END@
+	@x_cflags@
 
 
 #
@@ -27,7 +26,7 @@ libgtkincludedir = $(includedir)/gtk-1.2/gtk
 libgtk_la_DEPENDENCIES = $(top_builddir)/gdk/libgdk.la
 libgtk_la_LIBADD = $(top_builddir)/gdk/libgdk.la
 
-libgtk_la_LDFLAGS = @STRIP_BEGIN@ \
+libgtk_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE)	\
 	-release $(LT_RELEASE) 					\
 	-export-dynamic						\
@@ -35,8 +34,8 @@ libgtk_la_LDFLAGS = @STRIP_BEGIN@ \
 	$(filter-out -ldl, @GLIB_DEPLIBS@)			\
 	@x_ldflags@						\
 	$(filter-out -lXi -lXext, @x_libs@)			\
-	-lm							\
-@STRIP_END@
+	-lm
+	
 libgtk_la_LIBADD = $(top_builddir)/gdk/libgdk.la
 
 
@@ -44,7 +43,7 @@ libgtk_la_LIBADD = $(top_builddir)/gdk/libgdk.la
 # setup source file variables
 #
 # GTK+ header files for public installation (non-generated)
-gtk_public_h_sources = @STRIP_BEGIN@ \
+gtk_public_h_sources = \
 	gtk.h			\
 	gtkaccelgroup.h		\
 	gtkaccellabel.h		\
@@ -153,13 +152,13 @@ gtk_public_h_sources = @STRIP_BEGIN@ \
 	gtkvscrollbar.h		\
 	gtkvseparator.h		\
 	gtkwidget.h		\
-	gtkwindow.h		\
-@STRIP_END@
+	gtkwindow.h
+
 # GTK+ header files that don't get installed
-gtk_private_h_sources = @STRIP_BEGIN@ \
-@STRIP_END@
+gtk_private_h_sources =
+
 # GTK+ C sources to build the library from
-gtk_c_sources = @STRIP_BEGIN@ \
+gtk_c_sources = \
 	gtkaccelgroup.c		\
 	gtkaccellabel.c		\
 	gtkadjustment.c		\
@@ -267,8 +266,8 @@ gtk_c_sources = @STRIP_BEGIN@ \
 	gtkwidget.c		\
 	gtkwindow.c		\
 	fnmatch.c		\
-	fnmatch.h		\
-@STRIP_END@
+	fnmatch.h
+
 # we use our own built_sources variable rules to avoid automake's
 # BUILT_SOURCES oddities
 # we generate frequently rebuild files piggyback on a stamp file, so sources
@@ -276,7 +275,7 @@ gtk_c_sources = @STRIP_BEGIN@ \
 # content
 #
 # built sources that don't get installed
-gtk_built_sources = @STRIP_BEGIN@ \
+gtk_built_sources = \
 	stamp-gtk.defs		\
 	stamp-gtktypebuiltins.h	\
 	stamp-gtkmarshal.h	\
@@ -284,17 +283,17 @@ gtk_built_sources = @STRIP_BEGIN@ \
 	gtktypebuiltins_ids.c	\
 	gtktypebuiltins_evals.c	\
 	gtkmarshal.c		\
-	gtk.defs		\
-@STRIP_END@
+	gtk.defs
+
 # built sources that get installed with the header files
-gtk_built_public_sources = @STRIP_BEGIN@ \
+gtk_built_public_sources = \
 	gtkmarshal.h		\
-	gtktypebuiltins.h	\
-@STRIP_END@
+	gtktypebuiltins.h
+
 # non-header sources (headers should be specified in the above variables)
 # that don't serve as direct make target sources, i.e. they don't have
 # their own .lo rules and don't get publically installed
-gtk_extra_sources = @STRIP_BEGIN@ \
+gtk_extra_sources = \
 	gtkfeatures.h.in	\
 	makeenums.pl		\
 	makeenums.awk		\
@@ -303,22 +302,21 @@ gtk_extra_sources = @STRIP_BEGIN@ \
 	gtkargcollector.c	\
 	gtk-boxed.defs		\
 	genmarshal.pl		\
-	gtkmarshal.list		\
-@STRIP_END@
+	gtkmarshal.list
+
 # Extra headers that are used for enum type array/id generation
-gdk_headers = @STRIP_BEGIN@ \
+gdk_headers = \
 	../gdk/gdktypes.h	\
-	../gdk/gdkrgb.h		\
-@STRIP_END@
+	../gdk/gdkrgb.h
 
 #
 # setup GTK+ sources and their dependancies
 #
 libgtkinclude_HEADERS = $(gtk_public_h_sources) $(gtk_built_public_sources) gtkfeatures.h
 libgtk_la_SOURCES = $(gtk_c_sources)
-MAINTAINERCLEANFILES += $(gtk_built_public_sources) $(gtk_built_sources)
-EXTRA_HEADERS +=
-EXTRA_DIST += $(gtk_private_h_sources)
+MAINTAINERCLEANFILES = $(gtk_built_public_sources) $(gtk_built_sources)
+EXTRA_HEADERS =
+EXTRA_DIST = $(gtk_private_h_sources)
 EXTRA_DIST += $(gtk_built_sources) $(gtk_built_public_sources) $(gtk_extra_sources)
 
 #
@@ -326,7 +324,7 @@ EXTRA_DIST += $(gtk_built_sources) $(gtk_built_public_sources) $(gtk_extra_sourc
 #
 # setup autogeneration dependancies
 gen_sources = xgen-gdef xgen-gtbh xgen-gtbvc xgen-gtbic xgen-gtbec xgen-gmh xgen-gmc
-CLEANFILES += $(gen_sources)
+CLEANFILES = $(gen_sources)
 COPYING: $(gtk_built_public_sources) $(gtk_built_sources)
 $(OBJECTS): COPYING 	# this is our oldest-source-stamp
 # initial creation of the real stamp-* files
@@ -430,15 +428,15 @@ uninstall-local:
 #
 noinst_PROGRAMS = testgtk testinput testselection testrgb testdnd simple # testthreads
 DEPS = libgtk.la $(top_builddir)/gdk/libgdk.la
-LDADDS = @STRIP_BEGIN@ \
+LDADDS = \
 	libgtk.la			\
 	$(top_builddir)/gdk/libgdk.la	\
 	@x_ldflags@			\
 	@x_libs@			\
 	@GDK_WLIBS@			\
 	@GLIB_LIBS@			\
-	-lm				\
-@STRIP_END@
+	-lm
+
 testgtk_DEPENDENCIES = $(DEPS)
 testinput_DEPENDENCIES = $(DEPS)
 testselection_DEPENDENCIES = $(DEPS)
@@ -471,7 +469,7 @@ test-debug: testgtk
 	cd $$builddir; cd $(srcdir); \
 	$(SHELL) $$top_builddir/libtool --mode=execute gdb $$builddir/testgtk
 
-EXTRA_DIST += @STRIP_BEGIN@ \
+EXTRA_DIST += \
 	testgtk.1 		\
 	testgtkrc 		\
 	testgtkrc2 		\
@@ -492,5 +490,4 @@ EXTRA_DIST += @STRIP_BEGIN@ \
 	check-y.xpm		\
 	check-n.xpm		\
 	test.xpm		\
-	$(gtkconf_DATA)		\
-@STRIP_END@
+	$(gtkconf_DATA)

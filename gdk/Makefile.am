@@ -1,14 +1,13 @@
 ## Makefile.am for gtk+/gdk
 
-INCLUDES = @STRIP_BEGIN@ \
+INCLUDES = \
 	-DG_LOG_DOMAIN=\"Gdk\"	\
 	-I$(top_srcdir)		\
 	@GTK_DEBUG_FLAGS@ 	\
 	@GTK_XIM_FLAGS@		\
 	@GTK_LOCALE_FLAGS@	\
 	@GLIB_CFLAGS@		\
-	@x_cflags@ 		\
-@STRIP_END@
+	@x_cflags@
 
 #
 # libraries to compile and install
@@ -17,7 +16,7 @@ lib_LTLIBRARIES = libgdk.la
 
 # libtool stuff: set version and export symbols for resolving
 libgdkincludedir = $(includedir)/gtk-1.2/gdk
-libgdk_la_LDFLAGS = @STRIP_BEGIN@ \
+libgdk_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
 	-release $(LT_RELEASE) \
 	-export-dynamic \
@@ -25,13 +24,13 @@ libgdk_la_LDFLAGS = @STRIP_BEGIN@ \
 	$(filter-out -lgmodule -ldl, @GLIB_DEPLIBS@) \
 	@x_ldflags@	\
 	@x_libs@	\
-@STRIP_END@
+	-lm
 
 #
 # setup source file variables
 #
 # GDK header files for public installation (non-generated)
-gdk_public_h_sources = @STRIP_BEGIN@ \
+gdk_public_h_sources = \
 	gdk.h		\
 	gdkcursors.h	\
 	gdkrgb.h	\
@@ -39,9 +38,9 @@ gdk_public_h_sources = @STRIP_BEGIN@ \
 	gdkkeysyms.h	\
 	gdkprivate.h	\
 	gdktypes.h	\
-	gdkx.h		\
-@STRIP_END@
-gdk_c_sources = @STRIP_BEGIN@ \
+	gdkx.h
+
+gdk_c_sources = \
 	gdk.c		\
 	gdkcc.c		\
 	gdkcolor.c	\
@@ -72,17 +71,16 @@ gdk_c_sources = @STRIP_BEGIN@ \
 	MwmUtil.h       \
 	gxid_lib.h	\
 	gxid_proto.h	\
-        gxid_lib.c	\
-@STRIP_END@
+        gxid_lib.c
 
 #
 # setup GDK sources and their dependancies
 #
 libgdkinclude_HEADERS = $(gdk_public_h_sources)
 libgdk_la_SOURCES = $(gdk_c_sources)
-MAINTAINERCLEANFILES +=
-EXTRA_HEADERS +=
-EXTRA_DIST +=
+MAINTAINERCLEANFILES =
+EXTRA_HEADERS =
+EXTRA_DIST =
 EXTRA_DIST +=
 
 #
@@ -103,12 +101,12 @@ X-derived-headers:
 #
 EXTRA_PROGRAMS = gxid
 bin_PROGRAMS = @xinput_progs@
-LDADDS = @STRIP_BEGIN@ \
+LDADDS = \
 	@x_ldflags@	\
 	@x_libs@	\
 	@GLIB_LIBS@	\
-	-lm		\
-@STRIP_END@
+	-lm
+
 gxid_SOURCES = gxid.c
 gxid_LDADD = $(LDADDS)
 

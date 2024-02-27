@@ -166,7 +166,7 @@ files:
 	  echo $$p; \
 	done
 
-EXTRA_DIST += \
+EXTRA_DIST = \
 	Changes-1.2.txt			\
 	debugging.txt			\
 	developers.txt			\
