@@ -8,6 +8,8 @@ bin_SCRIPTS = gtk-config
 # require automake 1.4
 AUTOMAKE_OPTIONS = 1.4
 
+ACLOCAL_AMFLAGS = -I m4
+
 EXTRA_DIST =	\
 	HACKING		\
 	gtk+.spec.in	\

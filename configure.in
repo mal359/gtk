@@ -1,4 +1,5 @@
-# Process this file with autoconf to produce a configure script.
+AC_CONFIG_MACRO_DIRS([m4])
+#Process this file with autoconf to produce a configure script.
 AC_INIT(gdk/gdktypes.h)
 DIVERT
 # In the following, there are a the following variants
