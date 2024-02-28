@@ -1794,6 +1794,7 @@ static char * documents_xpm[] = {
 "                                                                                                ",
 "                                                                                                "};
 
+char *text;
 
 #define DIR_LIST_WIDTH   180
 #define DIR_LIST_HEIGHT  180
@@ -1850,6 +1851,9 @@ typedef struct _PossibleCompletion PossibleCompletion;
  * for the purposes of filename completion.  These structures are cached
  * in the CompletionState struct.  CompletionDir's are reference counted.
  */
+/* Saves errno when something cmpl does fails. */
+static gint cmpl_errno;
+
 struct _CompletionDirSent
 {
   ino_t inode;
@@ -1936,112 +1940,1305 @@ struct _CompletionState
   struct _CompletionUserDir *user_directories;
 };
 
+static CompletionDir*
+attach_dir(CompletionDirSent* sent, gchar* dir_name, 
+	  CompletionState *cmpl_state)
+{
+  CompletionDir* new_dir;
+
+  new_dir = g_new(CompletionDir, 1);
+
+  cmpl_state->directory_storage =
+    g_list_prepend(cmpl_state->directory_storage, new_dir);
+
+  new_dir->sent = sent;
+  new_dir->fullname = g_strdup(dir_name);
+  new_dir->fullname_len = strlen(dir_name);
+
+  return new_dir;
+}
+
+static gint first_diff_index(gchar* pat, gchar* text);
+static gint compare_user_dir(const void* a, const void* b);
+static gint compare_cmpl_dir(const void* a, const void* b)
+{
+  return strcmp((((CompletionDirEntry*)a))->entry_name,
+		(((CompletionDirEntry*)b))->entry_name);
+}
+static void update_cmpl(PossibleCompletion* poss,
+			CompletionState* cmpl_state);
+
+static CompletionDirSent* open_new_dir
+(gchar* dir_name, struct stat* sbuf, gboolean stat_subdirs)
+{
+  CompletionDirSent* sent;
+  DIR* directory;
+  gchar *buffer_ptr;
+  struct dirent *dirent_ptr;
+  gint buffer_size = 0;
+  gint entry_count = 0;
+  gint i;
+  struct stat ent_sbuf;
+  char path_buf[MAXPATHLEN*2];
+  gint path_buf_len;
+
+  sent = g_new(CompletionDirSent, 1);
+  sent->mtime = sbuf->st_mtime;
+  sent->inode = sbuf->st_ino;
+  sent->device = sbuf->st_dev;
+
+  path_buf_len = strlen(dir_name);
+
+  if (path_buf_len > MAXPATHLEN)
+    {
+      cmpl_errno = CMPL_ERRNO_TOO_LONG;
+      return NULL;
+    }
+
+  strcpy(path_buf, dir_name);
+
+  directory = opendir(dir_name);
+
+  if(!directory)
+    {
+      cmpl_errno = errno;
+      return NULL;
+    }
+
+  while((dirent_ptr = readdir(directory)) != NULL)
+    {
+      int entry_len = strlen(dirent_ptr->d_name);
+      buffer_size += entry_len + 1;
+      entry_count += 1;
+
+      if(path_buf_len + entry_len + 2 >= MAXPATHLEN)
+	{
+	  cmpl_errno = CMPL_ERRNO_TOO_LONG;
+ 	  closedir(directory);
+	  return NULL;
+	}
+    }
+
+  sent->name_buffer = g_new(gchar, buffer_size);
+  sent->entries = g_new(CompletionDirEntry, entry_count);
+  sent->entry_count = entry_count;
+
+  buffer_ptr = sent->name_buffer;
+
+  rewinddir(directory);
+
+  for(i = 0; i < entry_count; i += 1)
+    {
+      dirent_ptr = readdir(directory);
+
+      if(!dirent_ptr)
+	{
+	  cmpl_errno = errno;
+	  closedir(directory);
+	  return NULL;
+	}
+
+      strcpy(buffer_ptr, dirent_ptr->d_name);
+      sent->entries[i].entry_name = buffer_ptr;
+      buffer_ptr += strlen(dirent_ptr->d_name);
+      *buffer_ptr = 0;
+      buffer_ptr += 1;
+
+      path_buf[path_buf_len] = '/';
+      strcpy(path_buf + path_buf_len + 1, dirent_ptr->d_name);
+
+      if (stat_subdirs)
+	{
+	  if(stat(path_buf, &ent_sbuf) >= 0 && S_ISDIR(ent_sbuf.st_mode))
+	    sent->entries[i].is_dir = 1;
+	  else
+	    /* stat may fail, and we don't mind, since it could be a
+	     * dangling symlink. */
+	    sent->entries[i].is_dir = 0;
+	}
+      else
+	sent->entries[i].is_dir = 1;
+    }
+
+  qsort(sent->entries, sent->entry_count, sizeof(CompletionDirEntry), compare_cmpl_dir);
+
+  closedir(directory);
+
+  return sent;
+}
+
+
+/* Directory operations. */
+/* after the cache lookup fails, really open a new directory */
+
+static gboolean check_dir(gchar *dir_name, struct stat *result, gboolean *stat_subdirs)
+{
+  /* A list of directories that we know only contain other directories.
+   * Trying to stat every file in these directories would be very
+   * expensive.
+   */
+
+  static struct {
+    gchar *name;
+    gboolean present;
+    struct stat statbuf;
+  } no_stat_dirs[] = {
+    { "/afs", FALSE, { 0 } },
+    { "/net", FALSE, { 0 } }
+  };
+
+  static const gint n_no_stat_dirs = sizeof(no_stat_dirs) / sizeof(no_stat_dirs[0]);
+  static gboolean initialized = FALSE;
+
+  gint i;
+
+  if (!initialized)
+    {
+      initialized = TRUE;
+      for (i = 0; i < n_no_stat_dirs; i++)
+	{
+	  if (stat (no_stat_dirs[i].name, &no_stat_dirs[i].statbuf) == 0)
+	    no_stat_dirs[i].present = TRUE;
+	}
+    }
+
+  if(stat(dir_name, result) < 0)
+    {
+      cmpl_errno = errno;
+      return FALSE;
+    }
+
+  *stat_subdirs = TRUE;
+  for (i=0; i<n_no_stat_dirs; i++)
+    {
+      if (no_stat_dirs[i].present &&
+	  (no_stat_dirs[i].statbuf.st_dev == result->st_dev) &&
+	  (no_stat_dirs[i].statbuf.st_ino == result->st_ino))
+	{
+	  *stat_subdirs = FALSE;
+	  break;
+	}
+    }
+
+  return TRUE;
+}
+/* open a directory by absolute pathname */
+static CompletionDir* open_dir(gchar* dir_name, CompletionState* cmpl_state)
+{
+  struct stat sbuf;
+  gboolean stat_subdirs;
+  CompletionDirSent *sent;
+  GList* cdsl;
+
+  if (!check_dir (dir_name, &sbuf, &stat_subdirs))
+    return NULL;
+
+  cdsl = cmpl_state->directory_sent_storage;
+
+  while (cdsl)
+    {
+      sent = cdsl->data;
+
+      if(sent->inode == sbuf.st_ino &&
+	 sent->mtime == sbuf.st_mtime &&
+	 sent->device == sbuf.st_dev)
+	return attach_dir(sent, dir_name, cmpl_state);
+
+      cdsl = cdsl->next;
+    }
+
+  sent = open_new_dir(dir_name, &sbuf, stat_subdirs);
+
+  if (sent) {
+    cmpl_state->directory_sent_storage =
+      g_list_prepend(cmpl_state->directory_sent_storage, sent);
+
+    return attach_dir(sent, dir_name, cmpl_state);
+  }
+
+  return NULL;
+}
+
+static CompletionDir* open_user_dir        (gchar* text_to_complete,
+					    CompletionState *cmpl_state)
+{
+  gchar *first_slash;
+  gint cmp_len;
+
+  g_assert(text_to_complete && text_to_complete[0] == '~');
+
+  first_slash = strchr(text_to_complete, '/');
+
+  if (first_slash)
+    cmp_len = first_slash - text_to_complete - 1;
+  else
+    cmp_len = strlen(text_to_complete + 1);
+
+  if(!cmp_len)
+    {
+      /* ~/ */
+      gchar *homedir = g_get_home_dir ();
+
+      if (homedir)
+	return open_dir(homedir, cmpl_state);
+      else
+	return NULL;
+    }
+  else
+    {
+      /* ~user/ */
+      char* copy = g_new(char, cmp_len + 1);
+      struct passwd *pwd;
+      strncpy(copy, text_to_complete + 1, cmp_len);
+      copy[cmp_len] = 0;
+      pwd = getpwnam(copy);
+      g_free(copy);
+      if (!pwd)
+	{
+	  cmpl_errno = errno;
+	  return NULL;
+	}
+
+      return open_dir(pwd->pw_dir, cmpl_state);
+    }
+}
+static CompletionDir* open_ref_dir(gchar* text_to_complete,
+	     gchar** remaining_text,
+	     CompletionState* cmpl_state)
+{
+  gchar* first_slash;
+  CompletionDir *new_dir;
+
+  first_slash = strchr(text_to_complete, '/');
+
+  if (text_to_complete[0] == '~')
+    {
+      new_dir = open_user_dir(text_to_complete, cmpl_state);
+
+      if(new_dir)
+	{
+	  if(first_slash)
+	    *remaining_text = first_slash + 1;
+	  else
+	    *remaining_text = text_to_complete + strlen(text_to_complete);
+	}
+      else
+	{
+	  return NULL;
+	}
+    }
+  else if (text_to_complete[0] == '/' || !cmpl_state->reference_dir)
+    {
+      gchar *tmp = g_strdup(text_to_complete);
+      gchar *p;
+
+      p = tmp;
+      while (*p && *p != '*' && *p != '?')
+	p++;
+
+      *p = '\0';
+      p = strrchr(tmp, '/');
+      if (p)
+	{
+	  if (p == tmp)
+	    p++;
+      
+	  *p = '\0';
+
+	  new_dir = open_dir(tmp, cmpl_state);
+
+	  if(new_dir)
+	    *remaining_text = text_to_complete + 
+	      ((p == tmp + 1) ? (p - tmp) : (p + 1 - tmp));
+	}
+      else
+	{
+	  /* If no possible candidates, use the cwd */
+	  gchar *curdir = g_get_current_dir ();
+	  
+	  new_dir = open_dir(curdir, cmpl_state);
+
+	  if (new_dir)
+	    *remaining_text = text_to_complete;
+
+	  g_free (curdir);
+	}
+
+      g_free (tmp);
+    }
+  else
+    {
+      *remaining_text = text_to_complete;
+
+      new_dir = open_dir(cmpl_state->reference_dir->fullname, cmpl_state);
+    }
+
+  if(new_dir)
+    {
+      new_dir->cmpl_index = -1;
+      new_dir->cmpl_parent = NULL;
+    }
+
+  return new_dir;
+}
+static CompletionDir* open_relative_dir    (gchar* dir_name, CompletionDir* dir,
+					    CompletionState *cmpl_state)
+{
+  gchar path_buf[2*MAXPATHLEN];
+
+  if(dir->fullname_len + strlen(dir_name) + 2 >= MAXPATHLEN)
+    {
+      cmpl_errno = CMPL_ERRNO_TOO_LONG;
+      return NULL;
+    }
+
+  strcpy(path_buf, dir->fullname);
+
+  if(dir->fullname_len > 1)
+    {
+      path_buf[dir->fullname_len] = '/';
+      strcpy(path_buf + dir->fullname_len + 1, dir_name);
+    }
+  else
+    {
+      strcpy(path_buf + dir->fullname_len, dir_name);
+    }
+
+  return open_dir(path_buf, cmpl_state);
+}
+
 
 /* File completion functions which would be external, were they used
  * outside of this file.
  */
 
-static CompletionState*    cmpl_init_state        (void);
+static CompletionState*    cmpl_init_state        (void)
+{
+  gchar getcwd_buf[2*MAXPATHLEN];
+  CompletionState *new_state;
+  gint fallback = 0;
+
+  new_state = g_new (CompletionState, 1);
+
+  /* We don't use getcwd() on SUNOS, because, it does a popen("pwd")
+   * and, if that wasn't bad enough, hangs in doing so.
+   */
+#if defined(sun) && !defined(__SVR4)
+  if (!getwd (getcwd_buf))
+#else    
+  if (!getcwd (getcwd_buf, MAXPATHLEN))
+#endif    
+    {
+      /* Oh joy, we can't get the current directory. Um..., we should have
+       * a root directory, right? Right? (Probably not portable to non-Unix)
+       */
+      strcpy (getcwd_buf, "/");
+      fallback = 1;
+    }
+
+tryagain:
+
+  new_state->reference_dir = NULL;
+  new_state->completion_dir = NULL;
+  new_state->active_completion_dir = NULL;
+  new_state->directory_storage = NULL;
+  new_state->directory_sent_storage = NULL;
+  new_state->last_valid_char = 0;
+  new_state->updated_text = g_new (gchar, MAXPATHLEN);
+  new_state->updated_text_alloc = MAXPATHLEN;
+  new_state->the_completion.text = g_new (gchar, MAXPATHLEN);
+  new_state->the_completion.text_alloc = MAXPATHLEN;
+  new_state->user_dir_name_buffer = NULL;
+  new_state->user_directories = NULL;
+
+  new_state->reference_dir =  open_dir (getcwd_buf, new_state);
+
+  if (!new_state->reference_dir)
+    {
+      /* Directories changing from underneath us, grumble */
+      if (fallback == 0) {
+	strcpy (getcwd_buf, "/");
+	fallback = 1;
+      }
+      else {
+	if (fallback == 1) { /* last try with user home dir */
+	  if (g_get_home_dir ()) {
+	    strcpy (getcwd_buf, g_get_home_dir ());
+	  }
+	  fallback = 2;
+	}
+	else {
+	  g_error ("no readable fallback directory found for GtkFileSelector, exiting");
+	}
+      }
+      /* don't leak updated_text and the_completion.text */
+      if (new_state->the_completion.text)
+	g_free (new_state->the_completion.text);
+      if (new_state->updated_text)
+	g_free (new_state->updated_text);
+      goto tryagain;
+    }
+
+  return new_state;
+}
+
 static void                cmpl_free_state        (CompletionState *cmpl_state);
-static gint                cmpl_state_okay        (CompletionState* cmpl_state);
-static gchar*              cmpl_strerror          (gint);
 
-static PossibleCompletion* cmpl_completion_matches(gchar           *text_to_complete,
-						   gchar          **remaining_text,
-						   CompletionState *cmpl_state);
+static void           free_dir_sent (CompletionDirSent* sent)
+{
+  g_free(sent->name_buffer);
+  g_free(sent->entries);
+  g_free(sent);
+}
+static void           free_dir      (CompletionDir  *dir)
+{
+  g_free(dir->fullname);
+  g_free(dir);
+}
 
-/* Returns a name for consideration, possibly a completion, this name
+/**********************************************************************/
+/*	                 Construction, deletion                       */
+/**********************************************************************/
+
+void cmpl_free_dir_list(GList* dp0)
+{
+  GList *dp = dp0;
+
+  while (dp) {
+    free_dir (dp->data);
+    dp = dp->next;
+  }
+
+  g_list_free(dp0);
+}
+
+void cmpl_free_dir_sent_list(GList* dp0)
+{
+  GList *dp = dp0;
+
+  while (dp) {
+    free_dir_sent (dp->data);
+    dp = dp->next;
+  }
+
+  g_list_free(dp0);
+}
+
+void cmpl_free_state (CompletionState* cmpl_state)
+{
+  cmpl_free_dir_list (cmpl_state->directory_storage);
+  cmpl_free_dir_sent_list (cmpl_state->directory_sent_storage);
+
+  if (cmpl_state->user_dir_name_buffer)
+    g_free (cmpl_state->user_dir_name_buffer);
+  if (cmpl_state->user_directories)
+    g_free (cmpl_state->user_directories);
+  if (cmpl_state->the_completion.text)
+    g_free (cmpl_state->the_completion.text);
+  if (cmpl_state->updated_text)
+    g_free (cmpl_state->updated_text);
+
+  g_free (cmpl_state);
+}
+
+static void           prune_memory_usage(CompletionState *cmpl_state)
+{
+  GList* cdsl = cmpl_state->directory_sent_storage;
+  GList* cdl = cmpl_state->directory_storage;
+  GList* cdl0 = cdl;
+  gint len = 0;
+
+  for(; cdsl && len < CMPL_DIRECTORY_CACHE_SIZE; len += 1)
+    cdsl = cdsl->next;
+
+  if (cdsl) {
+    cmpl_free_dir_sent_list(cdsl->next);
+    cdsl->next = NULL;
+  }
+
+  cmpl_state->directory_storage = NULL;
+  while (cdl) {
+    if (cdl->data == cmpl_state->reference_dir)
+      cmpl_state->directory_storage = g_list_prepend(NULL, cdl->data);
+    else
+      free_dir (cdl->data);
+    cdl = cdl->next;
+  }
+
+  g_list_free(cdl0);
+}
+
+
+
+
+
+/* The three completion selectors
+ *
+ *
+ * Returns a name for consideration, possibly a completion, this name
  * will be invalid after the next call to cmpl_next_completion.
  */
-static char*               cmpl_this_completion   (PossibleCompletion*);
+static char*               cmpl_this_completion   (PossibleCompletion* pc)
+{
+  return pc->text;
+}
 
 /* True if this completion matches the given text.  Otherwise, this
  * output can be used to have a list of non-completions.
  */
-static gint                cmpl_is_a_completion   (PossibleCompletion*);
+static gint                cmpl_is_a_completion   (PossibleCompletion* pc)
+{
+  return pc->is_a_completion;
+}
 
 /* True if the completion is a directory
  */
-static gint                cmpl_is_directory      (PossibleCompletion*);
+static gint                cmpl_is_directory      (PossibleCompletion* pc)
+{
+  return pc->is_directory;
+}
 
-/* Obtains the next completion, or NULL
- */
-static PossibleCompletion* cmpl_next_completion   (CompletionState*);
 
-/* Updating completions: the return value of cmpl_updated_text() will
+/* The four completion state selectors
+ *
+ *
+ * Updating completions: the return value of cmpl_updated_text() will
  * be text_to_complete completed as much as possible after the most
  * recent call to cmpl_completion_matches.  For the present
  * application, this is the suggested replacement for the user's input
  * string.  You must CALL THIS AFTER ALL cmpl_text_completions have
  * been received.
  */
-static gchar*              cmpl_updated_text       (CompletionState* cmpl_state);
+static gchar*              cmpl_updated_text       (CompletionState* cmpl_state)
+{
+  return cmpl_state->updated_text;
+}
 
 /* After updating, to see if the completion was a directory, call
  * this.  If it was, you should consider re-calling completion_matches.
  */
-static gint                cmpl_updated_dir        (CompletionState* cmpl_state);
+static gint                cmpl_updated_dir        (CompletionState* cmpl_state)
+{
+  return cmpl_state->re_complete;
+}
 
 /* Current location: if using file completion, return the current
  * directory, from which file completion begins.  More specifically,
  * the cwd concatenated with all exact completions up to the last
  * directory delimiter('/').
  */
-static gchar*              cmpl_reference_position (CompletionState* cmpl_state);
+static gchar*              cmpl_reference_position (CompletionState* cmpl_state)
+{
+  return cmpl_state->reference_dir->fullname;
+}
 
 /* backing up: if cmpl_completion_matches returns NULL, you may query
  * the index of the last completable character into cmpl_updated_text.
  */
-static gint                cmpl_last_valid_char    (CompletionState* cmpl_state);
+static gint                cmpl_last_valid_char    (CompletionState* cmpl_state)
+{
+  return cmpl_state->last_valid_char;
+}
 
+static gint compare_user_dir(const void* a, const void* b)
+{
+  return strcmp((((CompletionUserDir*)a))->login,
+		(((CompletionUserDir*)b))->login);
+}
+
+static gint cmpl_state_okay(CompletionState* cmpl_state)
+{
+  return  cmpl_state && cmpl_state->reference_dir;
+}
+
+static gchar* cmpl_strerror(gint err)
+{
+  if(err == CMPL_ERRNO_TOO_LONG)
+    return "Name too long";
+  else
+    return g_strerror (err);
+}
+
+				    
 /* When the user selects a non-directory, call cmpl_completion_fullname
  * to get the full name of the selected file.
  */
-static gchar*              cmpl_completion_fullname (gchar*, CompletionState* cmpl_state);
+static gchar*              cmpl_completion_fullname (gchar*, CompletionState* cmpl_state)
+{
+  static char nothing[2] = "";
 
+  if (!cmpl_state_okay (cmpl_state))
+    {
+      return nothing;
+    }
+  else if (text[0] == '/')
+    {
+      strcpy (cmpl_state->updated_text, text);
+    }
+  else if (text[0] == '~')
+    {
+      CompletionDir* dir;
+      char* slash;
 
-/* Directory operations. */
-static CompletionDir* open_ref_dir         (gchar* text_to_complete,
-					    gchar** remaining_text,
-					    CompletionState* cmpl_state);
-static gboolean       check_dir            (gchar *dir_name, 
-					    struct stat *result, 
-					    gboolean *stat_subdirs);
-static CompletionDir* open_dir             (gchar* dir_name,
-					    CompletionState* cmpl_state);
-static CompletionDir* open_user_dir        (gchar* text_to_complete,
-					    CompletionState *cmpl_state);
-static CompletionDir* open_relative_dir    (gchar* dir_name, CompletionDir* dir,
-					    CompletionState *cmpl_state);
-static CompletionDirSent* open_new_dir     (gchar* dir_name, 
-					    struct stat* sbuf,
-					    gboolean stat_subdirs);
-static gint           correct_dir_fullname (CompletionDir* cmpl_dir);
-static gint           correct_parent       (CompletionDir* cmpl_dir,
-					    struct stat *sbuf);
-static gchar*         find_parent_dir_fullname    (gchar* dirname);
+      dir = open_user_dir (text, cmpl_state);
+
+      if (!dir)
+	{
+	  /* spencer says just return ~something, so
+	   * for now just do it. */
+	  strcpy (cmpl_state->updated_text, text);
+	}
+      else
+	{
+
+	  strcpy (cmpl_state->updated_text, dir->fullname);
+
+	  slash = strchr (text, '/');
+
+	  if (slash)
+	    strcat (cmpl_state->updated_text, slash);
+	}
+    }
+  else
+    {
+      strcpy (cmpl_state->updated_text, cmpl_state->reference_dir->fullname);
+      if (strcmp (cmpl_state->reference_dir->fullname, "/") != 0)
+	strcat (cmpl_state->updated_text, "/");
+      strcat (cmpl_state->updated_text, text);
+    }
+
+  return cmpl_state->updated_text;
+}
+
+static gchar* find_parent_dir_fullname(gchar* dirname)
+{
+  gchar buffer[MAXPATHLEN];
+  gchar buffer2[MAXPATHLEN];
+
+#if defined(sun) && !defined(__SVR4)
+  if(!getwd(buffer))
+#else
+  if(!getcwd(buffer, MAXPATHLEN))
+#endif    
+    {
+      cmpl_errno = errno;
+      return NULL;
+    }
+
+  if(chdir(dirname) != 0 || chdir("..") != 0)
+    {
+      cmpl_errno = errno;
+      return NULL;
+    }
+
+#if defined(sun) && !defined(__SVR4)
+  if(!getwd(buffer2))
+#else
+  if(!getcwd(buffer2, MAXPATHLEN))
+#endif
+    {
+      chdir(buffer);
+      cmpl_errno = errno;
+
+      return NULL;
+    }
+
+  if(chdir(buffer) != 0)
+    {
+      cmpl_errno = errno;
+      return NULL;
+    }
+
+  return g_strdup(buffer2);
+}
+
+static gint correct_parent(CompletionDir* cmpl_dir, struct stat *sbuf)
+{
+  struct stat parbuf;
+  gchar *last_slash;
+  gchar *new_name;
+  gchar c = 0;
+
+  last_slash = strrchr(cmpl_dir->fullname, '/');
+
+  g_assert(last_slash);
+
+  if(last_slash != cmpl_dir->fullname)
+    { /* last_slash[0] = 0; */ }
+  else
+    {
+      c = last_slash[1];
+      last_slash[1] = 0;
+    }
+
+  if (stat(cmpl_dir->fullname, &parbuf) < 0)
+    {
+      cmpl_errno = errno;
+      return FALSE;
+    }
+
+  if (parbuf.st_ino == sbuf->st_ino && parbuf.st_dev == sbuf->st_dev)
+    /* it wasn't a link */
+    return TRUE;
+
+  if(c)
+    last_slash[1] = c;
+  /* else
+    last_slash[0] = '/'; */
+
+  /* it was a link, have to figure it out the hard way */
+
+  new_name = find_parent_dir_fullname(cmpl_dir->fullname);
+
+  if (!new_name)
+    return FALSE;
+
+  g_free(cmpl_dir->fullname);
+
+  cmpl_dir->fullname = new_name;
+
+  return TRUE;
+}
+static gint correct_dir_fullname(CompletionDir* cmpl_dir)
+{
+  gint length = strlen(cmpl_dir->fullname);
+  struct stat sbuf;
+
+  if (strcmp(cmpl_dir->fullname + length - 2, "/.") == 0)
+    {
+      if (length == 2) 
+	{
+	  strcpy(cmpl_dir->fullname, "/");
+	  cmpl_dir->fullname_len = 1;
+	  return TRUE;
+	} else {
+	  cmpl_dir->fullname[length - 2] = 0;
+	}
+    }
+  else if (strcmp(cmpl_dir->fullname + length - 3, "/./") == 0)
+    cmpl_dir->fullname[length - 2] = 0;
+  else if (strcmp(cmpl_dir->fullname + length - 3, "/..") == 0)
+    {
+      if(length == 3)
+	{
+	  strcpy(cmpl_dir->fullname, "/");
+	  cmpl_dir->fullname_len = 1;
+	  return TRUE;
+	}
+
+      if(stat(cmpl_dir->fullname, &sbuf) < 0)
+	{
+	  cmpl_errno = errno;
+	  return FALSE;
+	}
+
+      cmpl_dir->fullname[length - 2] = 0;
+
+      if(!correct_parent(cmpl_dir, &sbuf))
+	return FALSE;
+    }
+  else if (strcmp(cmpl_dir->fullname + length - 4, "/../") == 0)
+    {
+      if(length == 4)
+	{
+	  strcpy(cmpl_dir->fullname, "/");
+	  cmpl_dir->fullname_len = 1;
+	  return TRUE;
+	}
+
+      if(stat(cmpl_dir->fullname, &sbuf) < 0)
+	{
+	  cmpl_errno = errno;
+	  return FALSE;
+	}
+
+      cmpl_dir->fullname[length - 3] = 0;
+
+      if(!correct_parent(cmpl_dir, &sbuf))
+	return FALSE;
+    }
+
+  cmpl_dir->fullname_len = strlen(cmpl_dir->fullname);
+
+  return TRUE;
+}
 static CompletionDir* attach_dir           (CompletionDirSent* sent,
 					    gchar* dir_name,
 					    CompletionState *cmpl_state);
-static void           free_dir_sent (CompletionDirSent* sent);
-static void           free_dir      (CompletionDir  *dir);
-static void           prune_memory_usage(CompletionState *cmpl_state);
+
+static gint get_pwdb(CompletionState* cmpl_state)
+{
+  struct passwd *pwd_ptr;
+  gchar* buf_ptr;
+  gint len = 0, i, count = 0;
+
+  if(cmpl_state->user_dir_name_buffer)
+    return TRUE;
+  setpwent ();
+
+  while ((pwd_ptr = getpwent()) != NULL)
+    {
+      len += strlen(pwd_ptr->pw_name);
+      len += strlen(pwd_ptr->pw_dir);
+      len += 2;
+      count += 1;
+    }
+
+  setpwent ();
+
+  cmpl_state->user_dir_name_buffer = g_new(gchar, len);
+  cmpl_state->user_directories = g_new(CompletionUserDir, count);
+  cmpl_state->user_directories_len = count;
+
+  buf_ptr = cmpl_state->user_dir_name_buffer;
+
+  for(i = 0; i < count; i += 1)
+    {
+      pwd_ptr = getpwent();
+      if(!pwd_ptr)
+	{
+	  cmpl_errno = errno;
+	  goto error;
+	}
+
+      strcpy(buf_ptr, pwd_ptr->pw_name);
+      cmpl_state->user_directories[i].login = buf_ptr;
+      buf_ptr += strlen(buf_ptr);
+      buf_ptr += 1;
+      strcpy(buf_ptr, pwd_ptr->pw_dir);
+      cmpl_state->user_directories[i].homedir = buf_ptr;
+      buf_ptr += strlen(buf_ptr);
+      buf_ptr += 1;
+    }
+
+  qsort(cmpl_state->user_directories,
+	cmpl_state->user_directories_len,
+	sizeof(CompletionUserDir),
+	compare_user_dir);
+
+  endpwent();
+
+  return TRUE;
+
+error:
+
+  if(cmpl_state->user_dir_name_buffer)
+    g_free(cmpl_state->user_dir_name_buffer);
+  if(cmpl_state->user_directories)
+    g_free(cmpl_state->user_directories);
+
+  cmpl_state->user_dir_name_buffer = NULL;
+  cmpl_state->user_directories = NULL;
+
+  return FALSE;
+}
+/**********************************************************************/
+/*                        Completion Operations                       */
+/**********************************************************************/
+
+/* returns the index (>= 0) of the first differing character,
+ * PATTERN_MATCH if the completion matches */
+static gint first_diff_index(gchar* pat, gchar* text)
+{
+  gint diff = 0;
+
+  while(*pat && *text && *text == *pat)
+    {
+      pat += 1;
+      text += 1;
+      diff += 1;
+    }
+
+  if(*pat)
+    return diff;
+
+  return PATTERN_MATCH;
+}
+
+static PossibleCompletion* append_completion_text(gchar* text, CompletionState* cmpl_state)
+{
+  gint len, i = 1;
+
+  if(!cmpl_state->the_completion.text)
+    return NULL;
+
+  len = strlen(text) + strlen(cmpl_state->the_completion.text) + 1;
+
+  if(cmpl_state->the_completion.text_alloc > len)
+    {
+      strcat(cmpl_state->the_completion.text, text);
+      return &cmpl_state->the_completion;
+    }
+
+  while(i < len) { i <<= 1; }
+
+  cmpl_state->the_completion.text_alloc = i;
+
+  cmpl_state->the_completion.text = (gchar*)g_realloc(cmpl_state->the_completion.text, i);
+
+  if(!cmpl_state->the_completion.text)
+    return NULL;
+  else
+    {
+      strcat(cmpl_state->the_completion.text, text);
+      return &cmpl_state->the_completion;
+    }
+}
+
+static CompletionDir* find_completion_dir(gchar* text_to_complete,
+		    gchar** remaining_text,
+		    CompletionState* cmpl_state)
+{
+  gchar* first_slash = strchr(text_to_complete, '/');
+  CompletionDir* dir = cmpl_state->reference_dir;
+  CompletionDir* next;
+  *remaining_text = text_to_complete;
+
+  while(first_slash)
+    {
+      gint len = first_slash - *remaining_text;
+      gint found = 0;
+      gchar *found_name = NULL;         /* Quiet gcc */
+      gint i;
+      gchar* pat_buf = g_new (gchar, len + 1);
+
+      strncpy(pat_buf, *remaining_text, len);
+      pat_buf[len] = 0;
+
+      for(i = 0; i < dir->sent->entry_count; i += 1)
+	{
+	  if(dir->sent->entries[i].is_dir &&
+	     fnmatch(pat_buf, dir->sent->entries[i].entry_name,
+		     FNMATCH_FLAGS)!= FNM_NOMATCH)
+	    {
+	      if(found)
+		{
+		  g_free (pat_buf);
+		  return dir;
+		}
+	      else
+		{
+		  found = 1;
+		  found_name = dir->sent->entries[i].entry_name;
+		}
+	    }
+	}
+
+      if (!found)
+	{
+	  /* Perhaps we are trying to open an automount directory */
+	  found_name = pat_buf;
+	}
+
+      next = open_relative_dir(found_name, dir, cmpl_state);
+      
+      if(!next)
+	{
+	  g_free (pat_buf);
+	  return NULL;
+	}
+      
+      next->cmpl_parent = dir;
+      
+      dir = next;
+      
+      if(!correct_dir_fullname(dir))
+	{
+	  g_free(pat_buf);
+	  return NULL;
+	}
+      
+      *remaining_text = first_slash + 1;
+      first_slash = strchr(*remaining_text, '/');
+
+      g_free (pat_buf);
+    }
+
+  return dir;
+}
+
+static void update_cmpl(PossibleCompletion* poss, CompletionState* cmpl_state)
+{
+  gint cmpl_len;
+
+  if(!poss || !cmpl_is_a_completion(poss))
+    return;
+
+  cmpl_len = strlen(cmpl_this_completion(poss));
+
+  if(cmpl_state->updated_text_alloc < cmpl_len + 1)
+    {
+      cmpl_state->updated_text =
+	(gchar*)g_realloc(cmpl_state->updated_text,
+			  cmpl_state->updated_text_alloc);
+      cmpl_state->updated_text_alloc = 2*cmpl_len;
+    }
+
+  if(cmpl_state->updated_text_len < 0)
+    {
+      strcpy(cmpl_state->updated_text, cmpl_this_completion(poss));
+      cmpl_state->updated_text_len = cmpl_len;
+      cmpl_state->re_complete = cmpl_is_directory(poss);
+    }
+  else if(cmpl_state->updated_text_len == 0)
+    {
+      cmpl_state->re_complete = FALSE;
+    }
+  else
+    {
+      gint first_diff =
+	first_diff_index(cmpl_state->updated_text,
+			 cmpl_this_completion(poss));
+
+      cmpl_state->re_complete = FALSE;
+
+      if(first_diff == PATTERN_MATCH)
+	return;
+
+      if(first_diff > cmpl_state->updated_text_len)
+	strcpy(cmpl_state->updated_text, cmpl_this_completion(poss));
+
+      cmpl_state->updated_text_len = first_diff;
+      cmpl_state->updated_text[first_diff] = 0;
+    }
+}
+
+static PossibleCompletion* attempt_file_completion(CompletionState *cmpl_state)
+{
+  gchar *pat_buf, *first_slash;
+  CompletionDir *dir = cmpl_state->active_completion_dir;
+
+  dir->cmpl_index += 1;
+
+  if(dir->cmpl_index == dir->sent->entry_count)
+    {
+      if(dir->cmpl_parent == NULL)
+	{
+	  cmpl_state->active_completion_dir = NULL;
+
+	  return NULL;
+	}
+      else
+	{
+	  cmpl_state->active_completion_dir = dir->cmpl_parent;
+
+	  return attempt_file_completion(cmpl_state);
+	}
+    }
+
+  g_assert(dir->cmpl_text);
+
+  first_slash = strchr(dir->cmpl_text, '/');
+
+  if(first_slash)
+    {
+      gint len = first_slash - dir->cmpl_text;
+
+      pat_buf = g_new (gchar, len + 1);
+      strncpy(pat_buf, dir->cmpl_text, len);
+      pat_buf[len] = 0;
+    }
+  else
+    {
+      gint len = strlen(dir->cmpl_text);
+
+      pat_buf = g_new (gchar, len + 2);
+      strcpy(pat_buf, dir->cmpl_text);
+      strcpy(pat_buf + len, "*");
+    }
+
+  if(first_slash)
+    {
+      if(dir->sent->entries[dir->cmpl_index].is_dir)
+	{
+	  if(fnmatch(pat_buf, dir->sent->entries[dir->cmpl_index].entry_name,
+		     FNMATCH_FLAGS) != FNM_NOMATCH)
+	    {
+	      CompletionDir* new_dir;
+
+	      new_dir = open_relative_dir(dir->sent->entries[dir->cmpl_index].entry_name,
+					  dir, cmpl_state);
+
+	      if(!new_dir)
+		{
+		  g_free (pat_buf);
+		  return NULL;
+		}
+
+	      new_dir->cmpl_parent = dir;
+
+	      new_dir->cmpl_index = -1;
+	      new_dir->cmpl_text = first_slash + 1;
+
+	      cmpl_state->active_completion_dir = new_dir;
+
+	      g_free (pat_buf);
+	      return attempt_file_completion(cmpl_state);
+	    }
+	  else
+	    {
+	      g_free (pat_buf);
+	      return attempt_file_completion(cmpl_state);
+	    }
+	}
+      else
+	{
+	  g_free (pat_buf);
+	  return attempt_file_completion(cmpl_state);
+	}
+    }
+  else
+    {
+      if(dir->cmpl_parent != NULL)
+	{
+	  append_completion_text(dir->fullname +
+				 strlen(cmpl_state->completion_dir->fullname) + 1,
+				 cmpl_state);
+	  append_completion_text("/", cmpl_state);
+	}
+
+      append_completion_text(dir->sent->entries[dir->cmpl_index].entry_name, cmpl_state);
+
+      cmpl_state->the_completion.is_a_completion =
+	(fnmatch(pat_buf, dir->sent->entries[dir->cmpl_index].entry_name,
+		 FNMATCH_FLAGS) != FNM_NOMATCH);
+
+      cmpl_state->the_completion.is_directory = dir->sent->entries[dir->cmpl_index].is_dir;
+      if(dir->sent->entries[dir->cmpl_index].is_dir)
+	append_completion_text("/", cmpl_state);
+
+      g_free (pat_buf);
+      return &cmpl_state->the_completion;
+    }
+}
 
 /* Completion operations */
 static PossibleCompletion* attempt_homedir_completion(gchar* text_to_complete,
-						      CompletionState *cmpl_state);
+						      CompletionState *cmpl_state)
+{
+  gint index, length;
+
+  if (!cmpl_state->user_dir_name_buffer &&
+      !get_pwdb(cmpl_state))
+    return NULL;
+  length = strlen(text_to_complete) - 1;
+
+  cmpl_state->user_completion_index += 1;
+
+  while(cmpl_state->user_completion_index < cmpl_state->user_directories_len)
+    {
+      index = first_diff_index(text_to_complete + 1,
+			       cmpl_state->user_directories
+			       [cmpl_state->user_completion_index].login);
+
+      switch(index)
+	{
+	case PATTERN_MATCH:
+	  break;
+	default:
+	  if(cmpl_state->last_valid_char < (index + 1))
+	    cmpl_state->last_valid_char = index + 1;
+	  cmpl_state->user_completion_index += 1;
+	  continue;
+	}
+
+      cmpl_state->the_completion.is_a_completion = 1;
+      cmpl_state->the_completion.is_directory = 1;
+
+      append_completion_text("~", cmpl_state);
+
+      append_completion_text(cmpl_state->
+			      user_directories[cmpl_state->user_completion_index].login,
+			     cmpl_state);
+
+      return append_completion_text("/", cmpl_state);
+    }
+
+  if(text_to_complete[1] ||
+     cmpl_state->user_completion_index > cmpl_state->user_directories_len)
+    {
+      cmpl_state->user_completion_index = -1;
+      return NULL;
+    }
+  else
+    {
+      cmpl_state->user_completion_index += 1;
+      cmpl_state->the_completion.is_a_completion = 1;
+      cmpl_state->the_completion.is_directory = 1;
+
+      return append_completion_text("~/", cmpl_state);
+    }
+}
+
+static PossibleCompletion* cmpl_completion_matches(gchar           *text_to_complete,
+						   gchar          **remaining_text,
+						   CompletionState *cmpl_state)
+{
+  gchar* first_slash;
+  PossibleCompletion *poss;
+
+  prune_memory_usage(cmpl_state);
+
+  g_assert (text_to_complete != NULL);
+
+  cmpl_state->user_completion_index = -1;
+  cmpl_state->last_completion_text = text_to_complete;
+  cmpl_state->the_completion.text[0] = 0;
+  cmpl_state->last_valid_char = 0;
+  cmpl_state->updated_text_len = -1;
+  cmpl_state->updated_text[0] = 0;
+  cmpl_state->re_complete = FALSE;
+
+  first_slash = strchr (text_to_complete, '/');
+
+  if (text_to_complete[0] == '~' && !first_slash)
+    {
+      /* Text starts with ~ and there is no slash, show all the
+       * home directory completions.
+       */
+      poss = attempt_homedir_completion (text_to_complete, cmpl_state);
+
+      update_cmpl(poss, cmpl_state);
+
+      return poss;
+    }
+
+  cmpl_state->reference_dir =
+    open_ref_dir (text_to_complete, remaining_text, cmpl_state);
+
+  if(!cmpl_state->reference_dir)
+    return NULL;
+
+  cmpl_state->completion_dir =
+    find_completion_dir (*remaining_text, remaining_text, cmpl_state);
+
+  cmpl_state->last_valid_char = *remaining_text - text_to_complete;
+
+  if(!cmpl_state->completion_dir)
+    return NULL;
+
+  cmpl_state->completion_dir->cmpl_index = -1;
+  cmpl_state->completion_dir->cmpl_parent = NULL;
+  cmpl_state->completion_dir->cmpl_text = *remaining_text;
+
+  cmpl_state->active_completion_dir = cmpl_state->completion_dir;
+
+  cmpl_state->reference_dir = cmpl_state->completion_dir;
+
+  poss = attempt_file_completion(cmpl_state);
+
+  update_cmpl(poss, cmpl_state);
+
+  return poss;
+}
+
+
 static PossibleCompletion* attempt_file_completion(CompletionState *cmpl_state);
 static CompletionDir* find_completion_dir(gchar* text_to_complete,
 					  gchar** remaining_text,
 					  CompletionState* cmpl_state);
 static PossibleCompletion* append_completion_text(gchar* text,
 						  CompletionState* cmpl_state);
-static gint get_pwdb(CompletionState* cmpl_state);
-static gint first_diff_index(gchar* pat, gchar* text);
-static gint compare_user_dir(const void* a, const void* b);
-static gint compare_cmpl_dir(const void* a, const void* b);
-static void update_cmpl(PossibleCompletion* poss,
-			CompletionState* cmpl_state);
 
 static void gtk_file_selection_class_init    (GtkFileSelectionClass *klass);
 static void gtk_file_selection_init          (GtkFileSelection      *filesel);
@@ -2066,7 +3263,18 @@ static void gtk_file_selection_populate      (GtkFileSelection      *fs,
 					      gchar                 *rel_path,
 					      gboolean               try_complete,
 					      gboolean               reset_entry);
-static void gtk_file_selection_abort         (GtkFileSelection      *fs);
+					      
+static void gtk_file_selection_abort         (GtkFileSelection      *fs)
+{
+  gchar err_buf[256];
+
+  sprintf (err_buf, _("Directory unreadable: %s"), cmpl_strerror (cmpl_errno));
+
+  /*  BEEP gdk_beep();  */
+
+  if (fs->selection_entry)
+    gtk_label_set_text (GTK_LABEL (fs->selection_text), err_buf);
+}
 
 static void gtk_file_selection_update_history_menu (GtkFileSelection       *fs,
 						    gchar                  *current_dir);
@@ -2083,9 +3291,6 @@ static void documents_clicked (GtkWidget *widget, gpointer data);
 static GtkWindowClass *parent_class = NULL;
 
 static char *last_dir = NULL;
-
-/* Saves errno when something cmpl does fails. */
-static gint cmpl_errno;
 
 GtkType
 gtk_file_selection_get_type (void)
@@ -2476,7 +3681,6 @@ gchar*
 gtk_file_selection_get_filename (GtkFileSelection *filesel)
 {
   static char nothing[2] = "";
-  char *text;
   char *filename;
 
   g_return_val_if_fail (filesel != NULL, nothing);
@@ -2932,7 +4136,7 @@ home_clicked (GtkWidget *widget, gpointer data)
   dir = g_strdup_printf ("%s/", g_get_home_dir());
   
   gtk_file_selection_populate (GTK_FILE_SELECTION (data), 
-			       dir, FALSE);
+			       dir, FALSE, TRUE);
   g_free (dir);
 }
 
@@ -2944,7 +4148,7 @@ desktop_clicked (GtkWidget *widget, gpointer data)
   dir = g_strdup_printf ("%s/.gnome-desktop/", g_get_home_dir ());
   
   gtk_file_selection_populate (GTK_FILE_SELECTION (data), 
-			       dir, FALSE);
+			       dir, FALSE, TRUE);
   g_free (dir);
 }
 
@@ -2954,7 +4158,7 @@ documents_clicked (GtkWidget *widget, gpointer data)
   char *dir;
   dir = g_strdup_printf ("%s/Documents/", g_get_home_dir ());
   
-  gtk_file_selection_populate (GTK_FILE_SELECTION (data), dir, FALSE);
+  gtk_file_selection_populate (GTK_FILE_SELECTION (data), dir, FALSE, TRUE);
   
   g_free (dir);
 }
@@ -3168,8 +4372,28 @@ gtk_file_selection_dir_button (GtkWidget *widget,
     gtk_file_selection_populate (fs, filename, FALSE, FALSE);
 }
 
-static void
-gtk_file_selection_populate (GtkFileSelection *fs,
+
+/**********************************************************************/
+/*                        The main entrances.                         */
+/**********************************************************************/
+
+static PossibleCompletion* cmpl_next_completion (CompletionState* cmpl_state)
+{
+  PossibleCompletion* poss = NULL;
+
+  cmpl_state->the_completion.text[0] = 0;
+
+  if(cmpl_state->user_completion_index >= 0)
+    poss = attempt_homedir_completion(cmpl_state->last_completion_text, cmpl_state);
+  else
+    poss = attempt_file_completion(cmpl_state);
+
+  update_cmpl(poss, cmpl_state);
+
+  return poss;
+}
+
+static void gtk_file_selection_populate (GtkFileSelection *fs,
 			     gchar            *rel_path,
 			     gboolean          try_complete,
 			     gboolean          reset_entry)
@@ -3356,1328 +4580,4 @@ gtk_file_selection_populate (GtkFileSelection *fs,
     }
 
   g_free (rel_path);
-}
-
-static void
-gtk_file_selection_abort (GtkFileSelection *fs)
-{
-  gchar err_buf[256];
-
-  sprintf (err_buf, _("Directory unreadable: %s"), cmpl_strerror (cmpl_errno));
-
-  /*  BEEP gdk_beep();  */
-
-  if (fs->selection_entry)
-    gtk_label_set_text (GTK_LABEL (fs->selection_text), err_buf);
-}
-
-/**********************************************************************/
-/*			  External Interface                          */
-/**********************************************************************/
-
-/* The four completion state selectors
- */
-static gchar*
-cmpl_updated_text (CompletionState* cmpl_state)
-{
-  return cmpl_state->updated_text;
-}
-
-static gint
-cmpl_updated_dir (CompletionState* cmpl_state)
-{
-  return cmpl_state->re_complete;
-}
-
-static gchar*
-cmpl_reference_position (CompletionState* cmpl_state)
-{
-  return cmpl_state->reference_dir->fullname;
-}
-
-static gint
-cmpl_last_valid_char (CompletionState* cmpl_state)
-{
-  return cmpl_state->last_valid_char;
-}
-
-static gchar*
-cmpl_completion_fullname (gchar* text, CompletionState* cmpl_state)
-{
-  static char nothing[2] = "";
-
-  if (!cmpl_state_okay (cmpl_state))
-    {
-      return nothing;
-    }
-  else if (text[0] == '/')
-    {
-      strcpy (cmpl_state->updated_text, text);
-    }
-  else if (text[0] == '~')
-    {
-      CompletionDir* dir;
-      char* slash;
-
-      dir = open_user_dir (text, cmpl_state);
-
-      if (!dir)
-	{
-	  /* spencer says just return ~something, so
-	   * for now just do it. */
-	  strcpy (cmpl_state->updated_text, text);
-	}
-      else
-	{
-
-	  strcpy (cmpl_state->updated_text, dir->fullname);
-
-	  slash = strchr (text, '/');
-
-	  if (slash)
-	    strcat (cmpl_state->updated_text, slash);
-	}
-    }
-  else
-    {
-      strcpy (cmpl_state->updated_text, cmpl_state->reference_dir->fullname);
-      if (strcmp (cmpl_state->reference_dir->fullname, "/") != 0)
-	strcat (cmpl_state->updated_text, "/");
-      strcat (cmpl_state->updated_text, text);
-    }
-
-  return cmpl_state->updated_text;
-}
-
-/* The three completion selectors
- */
-static gchar*
-cmpl_this_completion (PossibleCompletion* pc)
-{
-  return pc->text;
-}
-
-static gint
-cmpl_is_directory (PossibleCompletion* pc)
-{
-  return pc->is_directory;
-}
-
-static gint
-cmpl_is_a_completion (PossibleCompletion* pc)
-{
-  return pc->is_a_completion;
-}
-
-/**********************************************************************/
-/*	                 Construction, deletion                       */
-/**********************************************************************/
-
-static CompletionState*
-cmpl_init_state (void)
-{
-  gchar getcwd_buf[2*MAXPATHLEN];
-  CompletionState *new_state;
-  gint fallback = 0;
-
-  new_state = g_new (CompletionState, 1);
-
-  /* We don't use getcwd() on SUNOS, because, it does a popen("pwd")
-   * and, if that wasn't bad enough, hangs in doing so.
-   */
-#if defined(sun) && !defined(__SVR4)
-  if (!getwd (getcwd_buf))
-#else    
-  if (!getcwd (getcwd_buf, MAXPATHLEN))
-#endif    
-    {
-      /* Oh joy, we can't get the current directory. Um..., we should have
-       * a root directory, right? Right? (Probably not portable to non-Unix)
-       */
-      strcpy (getcwd_buf, "/");
-      fallback = 1;
-    }
-
-tryagain:
-
-  new_state->reference_dir = NULL;
-  new_state->completion_dir = NULL;
-  new_state->active_completion_dir = NULL;
-  new_state->directory_storage = NULL;
-  new_state->directory_sent_storage = NULL;
-  new_state->last_valid_char = 0;
-  new_state->updated_text = g_new (gchar, MAXPATHLEN);
-  new_state->updated_text_alloc = MAXPATHLEN;
-  new_state->the_completion.text = g_new (gchar, MAXPATHLEN);
-  new_state->the_completion.text_alloc = MAXPATHLEN;
-  new_state->user_dir_name_buffer = NULL;
-  new_state->user_directories = NULL;
-
-  new_state->reference_dir =  open_dir (getcwd_buf, new_state);
-
-  if (!new_state->reference_dir)
-    {
-      /* Directories changing from underneath us, grumble */
-      if (fallback == 0) {
-	strcpy (getcwd_buf, "/");
-	fallback = 1;
-      }
-      else {
-	if (fallback == 1) { /* last try with user home dir */
-	  if (g_get_home_dir ()) {
-	    strcpy (getcwd_buf, g_get_home_dir ());
-	  }
-	  fallback = 2;
-	}
-	else {
-	  g_error ("no readable fallback directory found for GtkFileSelector, exiting");
-	}
-      }
-      /* don't leak updated_text and the_completion.text */
-      if (new_state->the_completion.text)
-	g_free (new_state->the_completion.text);
-      if (new_state->updated_text)
-	g_free (new_state->updated_text);
-      goto tryagain;
-    }
-
-  return new_state;
-}
-
-static void
-cmpl_free_dir_list(GList* dp0)
-{
-  GList *dp = dp0;
-
-  while (dp) {
-    free_dir (dp->data);
-    dp = dp->next;
-  }
-
-  g_list_free(dp0);
-}
-
-static void
-cmpl_free_dir_sent_list(GList* dp0)
-{
-  GList *dp = dp0;
-
-  while (dp) {
-    free_dir_sent (dp->data);
-    dp = dp->next;
-  }
-
-  g_list_free(dp0);
-}
-
-static void
-cmpl_free_state (CompletionState* cmpl_state)
-{
-  cmpl_free_dir_list (cmpl_state->directory_storage);
-  cmpl_free_dir_sent_list (cmpl_state->directory_sent_storage);
-
-  if (cmpl_state->user_dir_name_buffer)
-    g_free (cmpl_state->user_dir_name_buffer);
-  if (cmpl_state->user_directories)
-    g_free (cmpl_state->user_directories);
-  if (cmpl_state->the_completion.text)
-    g_free (cmpl_state->the_completion.text);
-  if (cmpl_state->updated_text)
-    g_free (cmpl_state->updated_text);
-
-  g_free (cmpl_state);
-}
-
-static void
-free_dir(CompletionDir* dir)
-{
-  g_free(dir->fullname);
-  g_free(dir);
-}
-
-static void
-free_dir_sent(CompletionDirSent* sent)
-{
-  g_free(sent->name_buffer);
-  g_free(sent->entries);
-  g_free(sent);
-}
-
-static void
-prune_memory_usage(CompletionState *cmpl_state)
-{
-  GList* cdsl = cmpl_state->directory_sent_storage;
-  GList* cdl = cmpl_state->directory_storage;
-  GList* cdl0 = cdl;
-  gint len = 0;
-
-  for(; cdsl && len < CMPL_DIRECTORY_CACHE_SIZE; len += 1)
-    cdsl = cdsl->next;
-
-  if (cdsl) {
-    cmpl_free_dir_sent_list(cdsl->next);
-    cdsl->next = NULL;
-  }
-
-  cmpl_state->directory_storage = NULL;
-  while (cdl) {
-    if (cdl->data == cmpl_state->reference_dir)
-      cmpl_state->directory_storage = g_list_prepend(NULL, cdl->data);
-    else
-      free_dir (cdl->data);
-    cdl = cdl->next;
-  }
-
-  g_list_free(cdl0);
-}
-
-/**********************************************************************/
-/*                        The main entrances.                         */
-/**********************************************************************/
-
-static PossibleCompletion*
-cmpl_completion_matches (gchar* text_to_complete,
-			 gchar** remaining_text,
-			 CompletionState* cmpl_state)
-{
-  gchar* first_slash;
-  PossibleCompletion *poss;
-
-  prune_memory_usage(cmpl_state);
-
-  g_assert (text_to_complete != NULL);
-
-  cmpl_state->user_completion_index = -1;
-  cmpl_state->last_completion_text = text_to_complete;
-  cmpl_state->the_completion.text[0] = 0;
-  cmpl_state->last_valid_char = 0;
-  cmpl_state->updated_text_len = -1;
-  cmpl_state->updated_text[0] = 0;
-  cmpl_state->re_complete = FALSE;
-
-  first_slash = strchr (text_to_complete, '/');
-
-  if (text_to_complete[0] == '~' && !first_slash)
-    {
-      /* Text starts with ~ and there is no slash, show all the
-       * home directory completions.
-       */
-      poss = attempt_homedir_completion (text_to_complete, cmpl_state);
-
-      update_cmpl(poss, cmpl_state);
-
-      return poss;
-    }
-
-  cmpl_state->reference_dir =
-    open_ref_dir (text_to_complete, remaining_text, cmpl_state);
-
-  if(!cmpl_state->reference_dir)
-    return NULL;
-
-  cmpl_state->completion_dir =
-    find_completion_dir (*remaining_text, remaining_text, cmpl_state);
-
-  cmpl_state->last_valid_char = *remaining_text - text_to_complete;
-
-  if(!cmpl_state->completion_dir)
-    return NULL;
-
-  cmpl_state->completion_dir->cmpl_index = -1;
-  cmpl_state->completion_dir->cmpl_parent = NULL;
-  cmpl_state->completion_dir->cmpl_text = *remaining_text;
-
-  cmpl_state->active_completion_dir = cmpl_state->completion_dir;
-
-  cmpl_state->reference_dir = cmpl_state->completion_dir;
-
-  poss = attempt_file_completion(cmpl_state);
-
-  update_cmpl(poss, cmpl_state);
-
-  return poss;
-}
-
-static PossibleCompletion*
-cmpl_next_completion (CompletionState* cmpl_state)
-{
-  PossibleCompletion* poss = NULL;
-
-  cmpl_state->the_completion.text[0] = 0;
-
-  if(cmpl_state->user_completion_index >= 0)
-    poss = attempt_homedir_completion(cmpl_state->last_completion_text, cmpl_state);
-  else
-    poss = attempt_file_completion(cmpl_state);
-
-  update_cmpl(poss, cmpl_state);
-
-  return poss;
-}
-
-/**********************************************************************/
-/*			 Directory Operations                         */
-/**********************************************************************/
-
-/* Open the directory where completion will begin from, if possible. */
-static CompletionDir*
-open_ref_dir(gchar* text_to_complete,
-	     gchar** remaining_text,
-	     CompletionState* cmpl_state)
-{
-  gchar* first_slash;
-  CompletionDir *new_dir;
-
-  first_slash = strchr(text_to_complete, '/');
-
-  if (text_to_complete[0] == '~')
-    {
-      new_dir = open_user_dir(text_to_complete, cmpl_state);
-
-      if(new_dir)
-	{
-	  if(first_slash)
-	    *remaining_text = first_slash + 1;
-	  else
-	    *remaining_text = text_to_complete + strlen(text_to_complete);
-	}
-      else
-	{
-	  return NULL;
-	}
-    }
-  else if (text_to_complete[0] == '/' || !cmpl_state->reference_dir)
-    {
-      gchar *tmp = g_strdup(text_to_complete);
-      gchar *p;
-
-      p = tmp;
-      while (*p && *p != '*' && *p != '?')
-	p++;
-
-      *p = '\0';
-      p = strrchr(tmp, '/');
-      if (p)
-	{
-	  if (p == tmp)
-	    p++;
-      
-	  *p = '\0';
-
-	  new_dir = open_dir(tmp, cmpl_state);
-
-	  if(new_dir)
-	    *remaining_text = text_to_complete + 
-	      ((p == tmp + 1) ? (p - tmp) : (p + 1 - tmp));
-	}
-      else
-	{
-	  /* If no possible candidates, use the cwd */
-	  gchar *curdir = g_get_current_dir ();
-	  
-	  new_dir = open_dir(curdir, cmpl_state);
-
-	  if (new_dir)
-	    *remaining_text = text_to_complete;
-
-	  g_free (curdir);
-	}
-
-      g_free (tmp);
-    }
-  else
-    {
-      *remaining_text = text_to_complete;
-
-      new_dir = open_dir(cmpl_state->reference_dir->fullname, cmpl_state);
-    }
-
-  if(new_dir)
-    {
-      new_dir->cmpl_index = -1;
-      new_dir->cmpl_parent = NULL;
-    }
-
-  return new_dir;
-}
-
-/* open a directory by user name */
-static CompletionDir*
-open_user_dir(gchar* text_to_complete,
-	      CompletionState *cmpl_state)
-{
-  gchar *first_slash;
-  gint cmp_len;
-
-  g_assert(text_to_complete && text_to_complete[0] == '~');
-
-  first_slash = strchr(text_to_complete, '/');
-
-  if (first_slash)
-    cmp_len = first_slash - text_to_complete - 1;
-  else
-    cmp_len = strlen(text_to_complete + 1);
-
-  if(!cmp_len)
-    {
-      /* ~/ */
-      gchar *homedir = g_get_home_dir ();
-
-      if (homedir)
-	return open_dir(homedir, cmpl_state);
-      else
-	return NULL;
-    }
-  else
-    {
-      /* ~user/ */
-      char* copy = g_new(char, cmp_len + 1);
-      struct passwd *pwd;
-      strncpy(copy, text_to_complete + 1, cmp_len);
-      copy[cmp_len] = 0;
-      pwd = getpwnam(copy);
-      g_free(copy);
-      if (!pwd)
-	{
-	  cmpl_errno = errno;
-	  return NULL;
-	}
-
-      return open_dir(pwd->pw_dir, cmpl_state);
-    }
-}
-
-/* open a directory relative the the current relative directory */
-static CompletionDir*
-open_relative_dir(gchar* dir_name,
-		  CompletionDir* dir,
-		  CompletionState *cmpl_state)
-{
-  gchar path_buf[2*MAXPATHLEN];
-
-  if(dir->fullname_len + strlen(dir_name) + 2 >= MAXPATHLEN)
-    {
-      cmpl_errno = CMPL_ERRNO_TOO_LONG;
-      return NULL;
-    }
-
-  strcpy(path_buf, dir->fullname);
-
-  if(dir->fullname_len > 1)
-    {
-      path_buf[dir->fullname_len] = '/';
-      strcpy(path_buf + dir->fullname_len + 1, dir_name);
-    }
-  else
-    {
-      strcpy(path_buf + dir->fullname_len, dir_name);
-    }
-
-  return open_dir(path_buf, cmpl_state);
-}
-
-/* after the cache lookup fails, really open a new directory */
-static CompletionDirSent*
-open_new_dir(gchar* dir_name, struct stat* sbuf, gboolean stat_subdirs)
-{
-  CompletionDirSent* sent;
-  DIR* directory;
-  gchar *buffer_ptr;
-  struct dirent *dirent_ptr;
-  gint buffer_size = 0;
-  gint entry_count = 0;
-  gint i;
-  struct stat ent_sbuf;
-  char path_buf[MAXPATHLEN*2];
-  gint path_buf_len;
-
-  sent = g_new(CompletionDirSent, 1);
-  sent->mtime = sbuf->st_mtime;
-  sent->inode = sbuf->st_ino;
-  sent->device = sbuf->st_dev;
-
-  path_buf_len = strlen(dir_name);
-
-  if (path_buf_len > MAXPATHLEN)
-    {
-      cmpl_errno = CMPL_ERRNO_TOO_LONG;
-      return NULL;
-    }
-
-  strcpy(path_buf, dir_name);
-
-  directory = opendir(dir_name);
-
-  if(!directory)
-    {
-      cmpl_errno = errno;
-      return NULL;
-    }
-
-  while((dirent_ptr = readdir(directory)) != NULL)
-    {
-      int entry_len = strlen(dirent_ptr->d_name);
-      buffer_size += entry_len + 1;
-      entry_count += 1;
-
-      if(path_buf_len + entry_len + 2 >= MAXPATHLEN)
-	{
-	  cmpl_errno = CMPL_ERRNO_TOO_LONG;
- 	  closedir(directory);
-	  return NULL;
-	}
-    }
-
-  sent->name_buffer = g_new(gchar, buffer_size);
-  sent->entries = g_new(CompletionDirEntry, entry_count);
-  sent->entry_count = entry_count;
-
-  buffer_ptr = sent->name_buffer;
-
-  rewinddir(directory);
-
-  for(i = 0; i < entry_count; i += 1)
-    {
-      dirent_ptr = readdir(directory);
-
-      if(!dirent_ptr)
-	{
-	  cmpl_errno = errno;
-	  closedir(directory);
-	  return NULL;
-	}
-
-      strcpy(buffer_ptr, dirent_ptr->d_name);
-      sent->entries[i].entry_name = buffer_ptr;
-      buffer_ptr += strlen(dirent_ptr->d_name);
-      *buffer_ptr = 0;
-      buffer_ptr += 1;
-
-      path_buf[path_buf_len] = '/';
-      strcpy(path_buf + path_buf_len + 1, dirent_ptr->d_name);
-
-      if (stat_subdirs)
-	{
-	  if(stat(path_buf, &ent_sbuf) >= 0 && S_ISDIR(ent_sbuf.st_mode))
-	    sent->entries[i].is_dir = 1;
-	  else
-	    /* stat may fail, and we don't mind, since it could be a
-	     * dangling symlink. */
-	    sent->entries[i].is_dir = 0;
-	}
-      else
-	sent->entries[i].is_dir = 1;
-    }
-
-  qsort(sent->entries, sent->entry_count, sizeof(CompletionDirEntry), compare_cmpl_dir);
-
-  closedir(directory);
-
-  return sent;
-}
-
-static gboolean
-check_dir(gchar *dir_name, struct stat *result, gboolean *stat_subdirs)
-{
-  /* A list of directories that we know only contain other directories.
-   * Trying to stat every file in these directories would be very
-   * expensive.
-   */
-
-  static struct {
-    gchar *name;
-    gboolean present;
-    struct stat statbuf;
-  } no_stat_dirs[] = {
-    { "/afs", FALSE, { 0 } },
-    { "/net", FALSE, { 0 } }
-  };
-
-  static const gint n_no_stat_dirs = sizeof(no_stat_dirs) / sizeof(no_stat_dirs[0]);
-  static gboolean initialized = FALSE;
-
-  gint i;
-
-  if (!initialized)
-    {
-      initialized = TRUE;
-      for (i = 0; i < n_no_stat_dirs; i++)
-	{
-	  if (stat (no_stat_dirs[i].name, &no_stat_dirs[i].statbuf) == 0)
-	    no_stat_dirs[i].present = TRUE;
-	}
-    }
-
-  if(stat(dir_name, result) < 0)
-    {
-      cmpl_errno = errno;
-      return FALSE;
-    }
-
-  *stat_subdirs = TRUE;
-  for (i=0; i<n_no_stat_dirs; i++)
-    {
-      if (no_stat_dirs[i].present &&
-	  (no_stat_dirs[i].statbuf.st_dev == result->st_dev) &&
-	  (no_stat_dirs[i].statbuf.st_ino == result->st_ino))
-	{
-	  *stat_subdirs = FALSE;
-	  break;
-	}
-    }
-
-  return TRUE;
-}
-
-/* open a directory by absolute pathname */
-static CompletionDir*
-open_dir(gchar* dir_name, CompletionState* cmpl_state)
-{
-  struct stat sbuf;
-  gboolean stat_subdirs;
-  CompletionDirSent *sent;
-  GList* cdsl;
-
-  if (!check_dir (dir_name, &sbuf, &stat_subdirs))
-    return NULL;
-
-  cdsl = cmpl_state->directory_sent_storage;
-
-  while (cdsl)
-    {
-      sent = cdsl->data;
-
-      if(sent->inode == sbuf.st_ino &&
-	 sent->mtime == sbuf.st_mtime &&
-	 sent->device == sbuf.st_dev)
-	return attach_dir(sent, dir_name, cmpl_state);
-
-      cdsl = cdsl->next;
-    }
-
-  sent = open_new_dir(dir_name, &sbuf, stat_subdirs);
-
-  if (sent) {
-    cmpl_state->directory_sent_storage =
-      g_list_prepend(cmpl_state->directory_sent_storage, sent);
-
-    return attach_dir(sent, dir_name, cmpl_state);
-  }
-
-  return NULL;
-}
-
-static CompletionDir*
-attach_dir(CompletionDirSent* sent, gchar* dir_name, CompletionState *cmpl_state)
-{
-  CompletionDir* new_dir;
-
-  new_dir = g_new(CompletionDir, 1);
-
-  cmpl_state->directory_storage =
-    g_list_prepend(cmpl_state->directory_storage, new_dir);
-
-  new_dir->sent = sent;
-  new_dir->fullname = g_strdup(dir_name);
-  new_dir->fullname_len = strlen(dir_name);
-
-  return new_dir;
-}
-
-static gint
-correct_dir_fullname(CompletionDir* cmpl_dir)
-{
-  gint length = strlen(cmpl_dir->fullname);
-  struct stat sbuf;
-
-  if (strcmp(cmpl_dir->fullname + length - 2, "/.") == 0)
-    {
-      if (length == 2) 
-	{
-	  strcpy(cmpl_dir->fullname, "/");
-	  cmpl_dir->fullname_len = 1;
-	  return TRUE;
-	} else {
-	  cmpl_dir->fullname[length - 2] = 0;
-	}
-    }
-  else if (strcmp(cmpl_dir->fullname + length - 3, "/./") == 0)
-    cmpl_dir->fullname[length - 2] = 0;
-  else if (strcmp(cmpl_dir->fullname + length - 3, "/..") == 0)
-    {
-      if(length == 3)
-	{
-	  strcpy(cmpl_dir->fullname, "/");
-	  cmpl_dir->fullname_len = 1;
-	  return TRUE;
-	}
-
-      if(stat(cmpl_dir->fullname, &sbuf) < 0)
-	{
-	  cmpl_errno = errno;
-	  return FALSE;
-	}
-
-      cmpl_dir->fullname[length - 2] = 0;
-
-      if(!correct_parent(cmpl_dir, &sbuf))
-	return FALSE;
-    }
-  else if (strcmp(cmpl_dir->fullname + length - 4, "/../") == 0)
-    {
-      if(length == 4)
-	{
-	  strcpy(cmpl_dir->fullname, "/");
-	  cmpl_dir->fullname_len = 1;
-	  return TRUE;
-	}
-
-      if(stat(cmpl_dir->fullname, &sbuf) < 0)
-	{
-	  cmpl_errno = errno;
-	  return FALSE;
-	}
-
-      cmpl_dir->fullname[length - 3] = 0;
-
-      if(!correct_parent(cmpl_dir, &sbuf))
-	return FALSE;
-    }
-
-  cmpl_dir->fullname_len = strlen(cmpl_dir->fullname);
-
-  return TRUE;
-}
-
-static gint
-correct_parent(CompletionDir* cmpl_dir, struct stat *sbuf)
-{
-  struct stat parbuf;
-  gchar *last_slash;
-  gchar *new_name;
-  gchar c = 0;
-
-  last_slash = strrchr(cmpl_dir->fullname, '/');
-
-  g_assert(last_slash);
-
-  if(last_slash != cmpl_dir->fullname)
-    { /* last_slash[0] = 0; */ }
-  else
-    {
-      c = last_slash[1];
-      last_slash[1] = 0;
-    }
-
-  if (stat(cmpl_dir->fullname, &parbuf) < 0)
-    {
-      cmpl_errno = errno;
-      return FALSE;
-    }
-
-  if (parbuf.st_ino == sbuf->st_ino && parbuf.st_dev == sbuf->st_dev)
-    /* it wasn't a link */
-    return TRUE;
-
-  if(c)
-    last_slash[1] = c;
-  /* else
-    last_slash[0] = '/'; */
-
-  /* it was a link, have to figure it out the hard way */
-
-  new_name = find_parent_dir_fullname(cmpl_dir->fullname);
-
-  if (!new_name)
-    return FALSE;
-
-  g_free(cmpl_dir->fullname);
-
-  cmpl_dir->fullname = new_name;
-
-  return TRUE;
-}
-
-static gchar*
-find_parent_dir_fullname(gchar* dirname)
-{
-  gchar buffer[MAXPATHLEN];
-  gchar buffer2[MAXPATHLEN];
-
-#if defined(sun) && !defined(__SVR4)
-  if(!getwd(buffer))
-#else
-  if(!getcwd(buffer, MAXPATHLEN))
-#endif    
-    {
-      cmpl_errno = errno;
-      return NULL;
-    }
-
-  if(chdir(dirname) != 0 || chdir("..") != 0)
-    {
-      cmpl_errno = errno;
-      return NULL;
-    }
-
-#if defined(sun) && !defined(__SVR4)
-  if(!getwd(buffer2))
-#else
-  if(!getcwd(buffer2, MAXPATHLEN))
-#endif
-    {
-      chdir(buffer);
-      cmpl_errno = errno;
-
-      return NULL;
-    }
-
-  if(chdir(buffer) != 0)
-    {
-      cmpl_errno = errno;
-      return NULL;
-    }
-
-  return g_strdup(buffer2);
-}
-
-/**********************************************************************/
-/*                        Completion Operations                       */
-/**********************************************************************/
-
-static PossibleCompletion*
-attempt_homedir_completion(gchar* text_to_complete,
-			   CompletionState *cmpl_state)
-{
-  gint index, length;
-
-  if (!cmpl_state->user_dir_name_buffer &&
-      !get_pwdb(cmpl_state))
-    return NULL;
-  length = strlen(text_to_complete) - 1;
-
-  cmpl_state->user_completion_index += 1;
-
-  while(cmpl_state->user_completion_index < cmpl_state->user_directories_len)
-    {
-      index = first_diff_index(text_to_complete + 1,
-			       cmpl_state->user_directories
-			       [cmpl_state->user_completion_index].login);
-
-      switch(index)
-	{
-	case PATTERN_MATCH:
-	  break;
-	default:
-	  if(cmpl_state->last_valid_char < (index + 1))
-	    cmpl_state->last_valid_char = index + 1;
-	  cmpl_state->user_completion_index += 1;
-	  continue;
-	}
-
-      cmpl_state->the_completion.is_a_completion = 1;
-      cmpl_state->the_completion.is_directory = 1;
-
-      append_completion_text("~", cmpl_state);
-
-      append_completion_text(cmpl_state->
-			      user_directories[cmpl_state->user_completion_index].login,
-			     cmpl_state);
-
-      return append_completion_text("/", cmpl_state);
-    }
-
-  if(text_to_complete[1] ||
-     cmpl_state->user_completion_index > cmpl_state->user_directories_len)
-    {
-      cmpl_state->user_completion_index = -1;
-      return NULL;
-    }
-  else
-    {
-      cmpl_state->user_completion_index += 1;
-      cmpl_state->the_completion.is_a_completion = 1;
-      cmpl_state->the_completion.is_directory = 1;
-
-      return append_completion_text("~/", cmpl_state);
-    }
-}
-
-/* returns the index (>= 0) of the first differing character,
- * PATTERN_MATCH if the completion matches */
-static gint
-first_diff_index(gchar* pat, gchar* text)
-{
-  gint diff = 0;
-
-  while(*pat && *text && *text == *pat)
-    {
-      pat += 1;
-      text += 1;
-      diff += 1;
-    }
-
-  if(*pat)
-    return diff;
-
-  return PATTERN_MATCH;
-}
-
-static PossibleCompletion*
-append_completion_text(gchar* text, CompletionState* cmpl_state)
-{
-  gint len, i = 1;
-
-  if(!cmpl_state->the_completion.text)
-    return NULL;
-
-  len = strlen(text) + strlen(cmpl_state->the_completion.text) + 1;
-
-  if(cmpl_state->the_completion.text_alloc > len)
-    {
-      strcat(cmpl_state->the_completion.text, text);
-      return &cmpl_state->the_completion;
-    }
-
-  while(i < len) { i <<= 1; }
-
-  cmpl_state->the_completion.text_alloc = i;
-
-  cmpl_state->the_completion.text = (gchar*)g_realloc(cmpl_state->the_completion.text, i);
-
-  if(!cmpl_state->the_completion.text)
-    return NULL;
-  else
-    {
-      strcat(cmpl_state->the_completion.text, text);
-      return &cmpl_state->the_completion;
-    }
-}
-
-static CompletionDir*
-find_completion_dir(gchar* text_to_complete,
-		    gchar** remaining_text,
-		    CompletionState* cmpl_state)
-{
-  gchar* first_slash = strchr(text_to_complete, '/');
-  CompletionDir* dir = cmpl_state->reference_dir;
-  CompletionDir* next;
-  *remaining_text = text_to_complete;
-
-  while(first_slash)
-    {
-      gint len = first_slash - *remaining_text;
-      gint found = 0;
-      gchar *found_name = NULL;         /* Quiet gcc */
-      gint i;
-      gchar* pat_buf = g_new (gchar, len + 1);
-
-      strncpy(pat_buf, *remaining_text, len);
-      pat_buf[len] = 0;
-
-      for(i = 0; i < dir->sent->entry_count; i += 1)
-	{
-	  if(dir->sent->entries[i].is_dir &&
-	     fnmatch(pat_buf, dir->sent->entries[i].entry_name,
-		     FNMATCH_FLAGS)!= FNM_NOMATCH)
-	    {
-	      if(found)
-		{
-		  g_free (pat_buf);
-		  return dir;
-		}
-	      else
-		{
-		  found = 1;
-		  found_name = dir->sent->entries[i].entry_name;
-		}
-	    }
-	}
-
-      if (!found)
-	{
-	  /* Perhaps we are trying to open an automount directory */
-	  found_name = pat_buf;
-	}
-
-      next = open_relative_dir(found_name, dir, cmpl_state);
-      
-      if(!next)
-	{
-	  g_free (pat_buf);
-	  return NULL;
-	}
-      
-      next->cmpl_parent = dir;
-      
-      dir = next;
-      
-      if(!correct_dir_fullname(dir))
-	{
-	  g_free(pat_buf);
-	  return NULL;
-	}
-      
-      *remaining_text = first_slash + 1;
-      first_slash = strchr(*remaining_text, '/');
-
-      g_free (pat_buf);
-    }
-
-  return dir;
-}
-
-static void
-update_cmpl(PossibleCompletion* poss, CompletionState* cmpl_state)
-{
-  gint cmpl_len;
-
-  if(!poss || !cmpl_is_a_completion(poss))
-    return;
-
-  cmpl_len = strlen(cmpl_this_completion(poss));
-
-  if(cmpl_state->updated_text_alloc < cmpl_len + 1)
-    {
-      cmpl_state->updated_text =
-	(gchar*)g_realloc(cmpl_state->updated_text,
-			  cmpl_state->updated_text_alloc);
-      cmpl_state->updated_text_alloc = 2*cmpl_len;
-    }
-
-  if(cmpl_state->updated_text_len < 0)
-    {
-      strcpy(cmpl_state->updated_text, cmpl_this_completion(poss));
-      cmpl_state->updated_text_len = cmpl_len;
-      cmpl_state->re_complete = cmpl_is_directory(poss);
-    }
-  else if(cmpl_state->updated_text_len == 0)
-    {
-      cmpl_state->re_complete = FALSE;
-    }
-  else
-    {
-      gint first_diff =
-	first_diff_index(cmpl_state->updated_text,
-			 cmpl_this_completion(poss));
-
-      cmpl_state->re_complete = FALSE;
-
-      if(first_diff == PATTERN_MATCH)
-	return;
-
-      if(first_diff > cmpl_state->updated_text_len)
-	strcpy(cmpl_state->updated_text, cmpl_this_completion(poss));
-
-      cmpl_state->updated_text_len = first_diff;
-      cmpl_state->updated_text[first_diff] = 0;
-    }
-}
-
-static PossibleCompletion*
-attempt_file_completion(CompletionState *cmpl_state)
-{
-  gchar *pat_buf, *first_slash;
-  CompletionDir *dir = cmpl_state->active_completion_dir;
-
-  dir->cmpl_index += 1;
-
-  if(dir->cmpl_index == dir->sent->entry_count)
-    {
-      if(dir->cmpl_parent == NULL)
-	{
-	  cmpl_state->active_completion_dir = NULL;
-
-	  return NULL;
-	}
-      else
-	{
-	  cmpl_state->active_completion_dir = dir->cmpl_parent;
-
-	  return attempt_file_completion(cmpl_state);
-	}
-    }
-
-  g_assert(dir->cmpl_text);
-
-  first_slash = strchr(dir->cmpl_text, '/');
-
-  if(first_slash)
-    {
-      gint len = first_slash - dir->cmpl_text;
-
-      pat_buf = g_new (gchar, len + 1);
-      strncpy(pat_buf, dir->cmpl_text, len);
-      pat_buf[len] = 0;
-    }
-  else
-    {
-      gint len = strlen(dir->cmpl_text);
-
-      pat_buf = g_new (gchar, len + 2);
-      strcpy(pat_buf, dir->cmpl_text);
-      strcpy(pat_buf + len, "*");
-    }
-
-  if(first_slash)
-    {
-      if(dir->sent->entries[dir->cmpl_index].is_dir)
-	{
-	  if(fnmatch(pat_buf, dir->sent->entries[dir->cmpl_index].entry_name,
-		     FNMATCH_FLAGS) != FNM_NOMATCH)
-	    {
-	      CompletionDir* new_dir;
-
-	      new_dir = open_relative_dir(dir->sent->entries[dir->cmpl_index].entry_name,
-					  dir, cmpl_state);
-
-	      if(!new_dir)
-		{
-		  g_free (pat_buf);
-		  return NULL;
-		}
-
-	      new_dir->cmpl_parent = dir;
-
-	      new_dir->cmpl_index = -1;
-	      new_dir->cmpl_text = first_slash + 1;
-
-	      cmpl_state->active_completion_dir = new_dir;
-
-	      g_free (pat_buf);
-	      return attempt_file_completion(cmpl_state);
-	    }
-	  else
-	    {
-	      g_free (pat_buf);
-	      return attempt_file_completion(cmpl_state);
-	    }
-	}
-      else
-	{
-	  g_free (pat_buf);
-	  return attempt_file_completion(cmpl_state);
-	}
-    }
-  else
-    {
-      if(dir->cmpl_parent != NULL)
-	{
-	  append_completion_text(dir->fullname +
-				 strlen(cmpl_state->completion_dir->fullname) + 1,
-				 cmpl_state);
-	  append_completion_text("/", cmpl_state);
-	}
-
-      append_completion_text(dir->sent->entries[dir->cmpl_index].entry_name, cmpl_state);
-
-      cmpl_state->the_completion.is_a_completion =
-	(fnmatch(pat_buf, dir->sent->entries[dir->cmpl_index].entry_name,
-		 FNMATCH_FLAGS) != FNM_NOMATCH);
-
-      cmpl_state->the_completion.is_directory = dir->sent->entries[dir->cmpl_index].is_dir;
-      if(dir->sent->entries[dir->cmpl_index].is_dir)
-	append_completion_text("/", cmpl_state);
-
-      g_free (pat_buf);
-      return &cmpl_state->the_completion;
-    }
-}
-
-
-static gint
-get_pwdb(CompletionState* cmpl_state)
-{
-  struct passwd *pwd_ptr;
-  gchar* buf_ptr;
-  gint len = 0, i, count = 0;
-
-  if(cmpl_state->user_dir_name_buffer)
-    return TRUE;
-  setpwent ();
-
-  while ((pwd_ptr = getpwent()) != NULL)
-    {
-      len += strlen(pwd_ptr->pw_name);
-      len += strlen(pwd_ptr->pw_dir);
-      len += 2;
-      count += 1;
-    }
-
-  setpwent ();
-
-  cmpl_state->user_dir_name_buffer = g_new(gchar, len);
-  cmpl_state->user_directories = g_new(CompletionUserDir, count);
-  cmpl_state->user_directories_len = count;
-
-  buf_ptr = cmpl_state->user_dir_name_buffer;
-
-  for(i = 0; i < count; i += 1)
-    {
-      pwd_ptr = getpwent();
-      if(!pwd_ptr)
-	{
-	  cmpl_errno = errno;
-	  goto error;
-	}
-
-      strcpy(buf_ptr, pwd_ptr->pw_name);
-      cmpl_state->user_directories[i].login = buf_ptr;
-      buf_ptr += strlen(buf_ptr);
-      buf_ptr += 1;
-      strcpy(buf_ptr, pwd_ptr->pw_dir);
-      cmpl_state->user_directories[i].homedir = buf_ptr;
-      buf_ptr += strlen(buf_ptr);
-      buf_ptr += 1;
-    }
-
-  qsort(cmpl_state->user_directories,
-	cmpl_state->user_directories_len,
-	sizeof(CompletionUserDir),
-	compare_user_dir);
-
-  endpwent();
-
-  return TRUE;
-
-error:
-
-  if(cmpl_state->user_dir_name_buffer)
-    g_free(cmpl_state->user_dir_name_buffer);
-  if(cmpl_state->user_directories)
-    g_free(cmpl_state->user_directories);
-
-  cmpl_state->user_dir_name_buffer = NULL;
-  cmpl_state->user_directories = NULL;
-
-  return FALSE;
-}
-
-static gint
-compare_user_dir(const void* a, const void* b)
-{
-  return strcmp((((CompletionUserDir*)a))->login,
-		(((CompletionUserDir*)b))->login);
-}
-
-static gint
-compare_cmpl_dir(const void* a, const void* b)
-{
-  return strcmp((((CompletionDirEntry*)a))->entry_name,
-		(((CompletionDirEntry*)b))->entry_name);
-}
-
-static gint
-cmpl_state_okay(CompletionState* cmpl_state)
-{
-  return  cmpl_state && cmpl_state->reference_dir;
-}
-
-static gchar*
-cmpl_strerror(gint err)
-{
-  if(err == CMPL_ERRNO_TOO_LONG)
-    return "Name too long";
-  else
-    return g_strerror (err);
-}
+}}
