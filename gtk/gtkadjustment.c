@@ -26,7 +26,7 @@
 
 #include "gtkadjustment.h"
 #include "gtksignal.h"
-
+#include <stddef.h>
 
 enum {
   CHANGED,
