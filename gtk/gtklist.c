@@ -29,6 +29,7 @@
 #include "gtkmain.h"
 #include "gtksignal.h"
 #include "gtklabel.h"
+#include <stddef.h>
 
 enum {
   SELECTION_CHANGED,

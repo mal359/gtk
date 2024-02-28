@@ -27,7 +27,6 @@
 #include "gtkcheckmenuitem.h"
 #include "gtkaccellabel.h"
 #include "gtksignal.h"
-#include <stddef.h>
 
 
 #define CHECK_MENU_ITEM_CLASS(w)  GTK_CHECK_MENU_ITEM_CLASS (GTK_OBJECT (w)->klass)

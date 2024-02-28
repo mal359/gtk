@@ -26,7 +26,6 @@
 
 #include "gtkdata.h"
 #include "gtksignal.h"
-#include <stddef.h>
 
 
 enum {
