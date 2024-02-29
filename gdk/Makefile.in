@@ -431,7 +431,6 @@ lib_LTLIBRARIES = libgdk.la
 libgdkincludedir = $(includedir)/gtk-1.2/gdk
 libgdk_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
-	-release $(LT_RELEASE) \
 	-export-dynamic \
 	-no-undefined -Wl,--no-undefined \
 	$(filter-out -lgmodule -ldl, @GLIB_DEPLIBS@) \
