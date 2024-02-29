@@ -519,7 +519,6 @@ libgtk_la_DEPENDENCIES = $(top_builddir)/gdk/libgdk.la
 libgtk_la_LIBADD = $(top_builddir)/gdk/libgdk.la
 libgtk_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE)	\
-	-release $(LT_RELEASE) 					\
 	-export-dynamic						\
 	-no-undefined -Wl,--no-undefined			\
 	$(filter-out -ldl, @GLIB_DEPLIBS@)			\
